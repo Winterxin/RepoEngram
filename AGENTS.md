@@ -1,0 +1,3 @@
+# RepoEngram development
+
+Preserve generality: never encode task IDs, benchmark answers, repository names or project-specific fields into product logic. Keep evidence and prompts bounded; add no model stage without measured need. Keep old test assertions and frozen evaluation oracles intact. Native-fullpass screens are retained and do not count as enhancement gains. Use the documented public test subset; fixture helper modules are dependencies, not the full internal engineering suite. Report measured model usage and time honestly. Preserve user configuration and repository-local ownership boundaries.

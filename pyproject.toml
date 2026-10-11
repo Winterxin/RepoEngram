@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repoengram"
+version = "0.1.0"
+description = "Evidence-backed repository memory and Skills for coding agents"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.11"
+authors = [{name = "RepoEngram contributors"}]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.9", "jsonschema>=4"]
+
+[project.scripts]
+repoengram = "skillforge.cli:main"
+repoengram-mcp = "skillforge.integration.mcp_server:main"
+skillforge = "skillforge.cli:main"
+skillforge-mcp = "skillforge.integration.mcp_server:main"
+skillforge-codex-init = "skillforge.integration.autonomous:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/test_agent_skill_rendering.py", "tests/test_repo_local_integration.py", "tests/test_skill_router.py", "tests/test_public_test_preservation.py", "tests/test_public_test_configuration.py", "tests/test_evolution_optional_serialization.py", "tests/test_mcp_scoped_risks.py", "tests/test_verify_report_repetition.py", "tests/test_completion_preview.py", "tests/test_mcp_check_binding.py", "tests/test_autonomous_mcp.py"]
+addopts = "-q"
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

@@ -1,0 +1,25 @@
+{
+  "checked_source_commit": "4fad887b0b77300042ac49307d3de5544d45bf90",
+  "production_files_exact_git_blob_match": 101,
+  "package_distribution": "repoengram",
+  "package_version": "0.1.0",
+  "fresh_venv_install": "PASSED_WITH_NO_RUNTIME_DEPENDENCIES",
+  "cli_aliases": [
+    "repoengram",
+    "skillforge"
+  ],
+  "installed_analyze": "PASS",
+  "installed_connect": "PASS",
+  "regression_passed": 129,
+  "regression_skipped": [
+    {
+      "name": "test_symlink_collision_and_root_escape_fail",
+      "reason": "symlink creation unavailable"
+    }
+  ],
+  "regression_failed": [],
+  "regression_seconds": 145.88,
+  "real_model_starts": 0,
+  "initial_temp_permission_errors_retained_locally": true,
+  "xml_sha256": "8d378fb03d4e878ef9949234a765767a2612e5f3366a66a7d78302d9d83383cd"
+}
