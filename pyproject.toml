@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "repoengram"
-version = "0.1.0"
+version = "0.1.1"
 description = "Evidence-backed repository memory and Skills for coding agents"
 readme = "README.md"
 license = {file = "LICENSE"}
@@ -26,7 +26,7 @@ skillforge-codex-init = "skillforge.integration.autonomous:main"
 where = ["src"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/test_agent_skill_rendering.py", "tests/test_repo_local_integration.py", "tests/test_skill_router.py", "tests/test_public_test_preservation.py", "tests/test_public_test_configuration.py", "tests/test_evolution_optional_serialization.py", "tests/test_mcp_scoped_risks.py", "tests/test_verify_report_repetition.py", "tests/test_completion_preview.py", "tests/test_mcp_check_binding.py", "tests/test_autonomous_mcp.py"]
+testpaths = ["tests/test_agent_skill_rendering.py", "tests/test_repo_local_integration.py", "tests/test_skill_router.py", "tests/test_public_test_preservation.py", "tests/test_public_test_configuration.py", "tests/test_evolution_optional_serialization.py", "tests/test_mcp_scoped_risks.py", "tests/test_verify_report_repetition.py", "tests/test_completion_preview.py", "tests/test_mcp_check_binding.py", "tests/test_autonomous_mcp.py", "tests/test_workflow_code_compatibility.py", "tests/test_bounded_git_patch_evidence.py", "tests/test_git_hunk_comparison.py", "tests/test_coherent_history_request.py", "tests/test_semantic_workflows.py", "tests/test_source_delivery_audit.py", "tests/test_source_rule_source_sensitivity.py", "tests/test_source_rule_packing.py", "tests/test_source_rule_distillation.py", "tests/test_source_rule_delivery.py", "tests/test_source_rule_coverage.py"]
 addopts = "-q"
 pythonpath = ["src"]
 

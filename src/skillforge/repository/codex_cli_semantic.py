@@ -28,7 +28,9 @@ from skillforge.repository.semantic_permissions import (
 )
 from skillforge.repository.semantic_reference_schema import bind_response_schema
 from skillforge.repository.semantic_workflow_prompt import (
+    CLASSIFICATION_PROTOCOL,
     build_semantic_workflow_prompt,
+    legacy_semantic_workflow_response_schema,
     semantic_workflow_response_schema,
 )
 
@@ -64,16 +66,74 @@ def _strings(value: object, label: str) -> tuple[str, ...]:
     return tuple(value)
 
 
+def _nonempty_strings(value: object, label: str) -> tuple[str, ...]:
+    result = _strings(value, label)
+    if not result:
+        raise ValueError(f"{label} must not be empty")
+    return result
+
+
 def _array(value: object, label: str) -> list:
     if not isinstance(value, list):
         raise ValueError(f"{label} must be an array")
     return value
 
 
+def _parse_v2_ordered_steps(value: object):
+    """Parse the v2 single-classification wire form into the existing domain fields."""
+    parsed_steps = []
+    groups = {"required": [], "optional": [], "conditional": []}
+    seen_step_ids = set()
+    for raw_step in _array(value, "ordered_steps"):
+        item = _object(raw_step, {
+            "step_id", "action", "evidence_ids", "classification_kind",
+            "classification_reason", "classification_evidence_ids",
+            "classification_condition",
+        }, "step")
+        step_id = _string(item["step_id"], "step_id")
+        if step_id in seen_step_ids:
+            raise ValueError("ordered_steps contains duplicate step_id")
+        seen_step_ids.add(step_id)
+        parsed_steps.append(SemanticWorkflowStep(
+            step_id,
+            _string(item["action"], "action"),
+            _nonempty_strings(item["evidence_ids"], "step evidence_ids"),
+        ))
+        kind = _string(item["classification_kind"], "classification_kind")
+        if kind not in groups:
+            raise ValueError("classification_kind must be required, optional, or conditional")
+        condition = item["classification_condition"]
+        if kind == "conditional":
+            condition = _string(condition, "classification_condition")
+            if not condition:
+                raise ValueError("conditional classification requires a non-empty condition")
+        elif condition is not None:
+            raise ValueError("required and optional classifications require a null condition")
+        groups[kind].append(SemanticStepClassification(
+            step_id,
+            _string(item["classification_reason"], "classification_reason"),
+            _nonempty_strings(
+                item["classification_evidence_ids"], "classification evidence_ids"
+            ),
+            condition,
+        ))
+    return (
+        tuple(parsed_steps),
+        tuple(groups["required"]),
+        tuple(groups["optional"]),
+        tuple(groups["conditional"]),
+    )
+
+
 def _parse_workflow(
-    raw: object, repository_id: str, candidate_id: str, confidence_score: float
+    raw: object, repository_id: str, candidate_id: str, confidence_score: float,
+    *, protocol_v2: bool = False,
 ) -> SemanticWorkflowResponse:
-    workflow_schema = semantic_workflow_response_schema()["properties"]["workflow"]
+    response_schema = (
+        semantic_workflow_response_schema() if protocol_v2
+        else legacy_semantic_workflow_response_schema()
+    )
+    workflow_schema = response_schema["properties"]["workflow"]
     data = _object(raw, set(workflow_schema["required"]), "workflow")
 
     def role(raw: object) -> SemanticWorkflowRole:
@@ -111,6 +171,26 @@ def _parse_workflow(
         "scope",
     )
     refs = _object(data["references"], {"commit_ids", "module_names", "paths"}, "references")
+    if protocol_v2:
+        ordered_steps, required_steps, optional_steps, conditional_steps = (
+            _parse_v2_ordered_steps(data["ordered_steps"])
+        )
+    else:
+        ordered_steps = tuple(
+            step(item) for item in _array(data["ordered_steps"], "ordered_steps")
+        )
+        required_steps = tuple(
+            classification(item)
+            for item in _array(data["required_steps"], "required_steps")
+        )
+        optional_steps = tuple(
+            classification(item)
+            for item in _array(data["optional_steps"], "optional_steps")
+        )
+        conditional_steps = tuple(
+            classification(item)
+            for item in _array(data["conditional_steps"], "conditional_steps")
+        )
     return SemanticWorkflowResponse(
         repository_id=repository_id,
         candidate_id=candidate_id,
@@ -119,16 +199,10 @@ def _parse_workflow(
         intent=_string(data["intent"], "intent"),
         intent_evidence_ids=_strings(data["intent_evidence_ids"], "intent_evidence_ids"),
         roles=tuple(role(item) for item in _array(data["roles"], "roles")),
-        ordered_steps=tuple(step(item) for item in _array(data["ordered_steps"], "ordered_steps")),
-        required_steps=tuple(
-            classification(item) for item in _array(data["required_steps"], "required_steps")
-        ),
-        optional_steps=tuple(
-            classification(item) for item in _array(data["optional_steps"], "optional_steps")
-        ),
-        conditional_steps=tuple(
-            classification(item) for item in _array(data["conditional_steps"], "conditional_steps")
-        ),
+        ordered_steps=ordered_steps,
+        required_steps=required_steps,
+        optional_steps=optional_steps,
+        conditional_steps=conditional_steps,
         scope=SemanticWorkflowScope(
             SemanticWorkflowScopeKind(_string(scope["kind"], "scope kind")),
             _strings(scope["selectors"], "scope selectors"),
@@ -157,8 +231,18 @@ def _parse_workflow(
 
 def parse_semantic_workflow_response(value: object) -> SemanticDecisionResponse:
     """Decode the structured decision; SkillForge validation follows separately."""
-    schema = semantic_workflow_response_schema()
+    if not isinstance(value, dict):
+        raise ValueError("response must be an object")
+    protocol_v2 = "classification_protocol" in value
+    schema = (
+        semantic_workflow_response_schema() if protocol_v2
+        else legacy_semantic_workflow_response_schema()
+    )
     data = _object(value, set(schema["required"]), "response")
+    if protocol_v2 and data["classification_protocol"] != CLASSIFICATION_PROTOCOL:
+        raise ValueError(
+            f"unsupported classification_protocol: {data['classification_protocol']!r}"
+        )
     repository_id = _string(data["repository_id"], "repository_id")
     candidate_id = _string(data["candidate_id"], "candidate_id")
     score = data["confidence_score"]
@@ -179,7 +263,9 @@ def parse_semantic_workflow_response(value: object) -> SemanticDecisionResponse:
         workflow=(
             None
             if workflow is None
-            else _parse_workflow(workflow, repository_id, candidate_id, float(score))
+            else _parse_workflow(
+                workflow, repository_id, candidate_id, float(score), protocol_v2=protocol_v2
+            )
         ),
     )
 

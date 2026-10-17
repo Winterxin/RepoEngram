@@ -505,6 +505,26 @@ def test_unrelated_rich_route_creates_no_fallback(historical_repository):
     assert result.installed_packages == ()
 
 
+def test_explicit_selection_scope_is_distinct_from_routing(repository):
+    from skillforge.errors import SkillForgeError
+    _git(repository, "init", "-q")
+    _git(repository, "add", "src")
+    _git(repository, "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+         "commit", "-qm", "base")
+    model = FakeModel(SemanticStructuralDecisionKind.ARCHITECTURE_RULE)
+    result = SkillForgePreparer(model).prepare(
+        PrepareRequest(repository, "unrelated lexical wording", CodeAgentTarget.CODEX,
+                       "app.api.route0", selection_module="absent_package"))
+    assert result.current_module == "app.api.route0"
+    assert result.structural_candidate_count == 0
+    baseline = load_baseline(repository, result.evolution_baseline_path)
+    assert baseline.source_state.current_module == "absent_package"
+    with pytest.raises(SkillForgeError, match="selection scope differs"):
+        SkillForgePreparer().prepare(PrepareRequest(
+            repository, "unrelated lexical wording", CodeAgentTarget.CODEX,
+            "app.api.route0", baseline=repository / result.evolution_baseline_path))
+
+
 def test_non_git_prepare_has_no_history_or_fallback(repository):
     result = _rich_prepare(repository, WorkflowModel(), AntiPatternModel(), task="unrelated")
     assert not result.history_participated

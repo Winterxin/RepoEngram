@@ -19,6 +19,14 @@ from skillforge.domain.change import (
     GitHistoryResult,
 )
 from skillforge.domain.evidence import Evidence, EvidenceType, SourceLocation
+from skillforge.repository.git_hunk_comparison import (
+    HunkCandidate,
+    compact_context_requests,
+    descendants_first_order,
+    function_anchor,
+    is_ancestor,
+    select_compared_hunks,
+)
 from skillforge.repository.identity import repository_identity
 
 MAX_GIT_READS = 16
@@ -120,11 +128,21 @@ def add_bounded_git_patch_evidence(
             eligible.append(item)
 
     if not eligible:
-        return BoundedGitPatchEvidenceResult(history, (), tuple(skipped), 0, 0)
+        stale_ids = _requested_patch_ids(history, seen, set())
+        cleaned = _without_evidence_ids(history, stale_ids) if stale_ids else history
+        return BoundedGitPatchEvidenceResult(cleaned, (), tuple(skipped), 0, 0)
+
+    eligible_by_key = {(item[0], item[1]): item for item in eligible}
+    ordered_keys = descendants_first_order(
+        [(item[0], item[1]) for item in eligible], changesets,
+    )
+    eligible = [eligible_by_key[key] for key in ordered_keys]
+    comparison_requests = [(item[0], item[1]) for item in eligible]
 
     # Reserve one root read, one parent read per distinct commit, and one patch read
     # per requested file. Reusing a verified parent lets same-commit requests fit.
     bounded_eligible: list[tuple[str, str, ChangeSet, FileChange]] = []
+    unavailable: dict[tuple[str, str], str] = {}
     verified_commits: set[str] = set()
     reserved_reads = 1
     for item in eligible:
@@ -132,6 +150,7 @@ def add_bounded_git_patch_evidence(
         needed = 1 + (commit_id not in verified_commits)
         if reserved_reads + needed > MAX_GIT_READS:
             skipped.append(GitPatchSkip(commit_id, path, "git_read_budget"))
+            unavailable[(commit_id, path)] = "git_read_budget"
             continue
         bounded_eligible.append(item)
         reserved_reads += needed
@@ -160,6 +179,7 @@ def add_bounded_git_patch_evidence(
     new_evidence_by_id: dict[str, Evidence] = {}
     total_new_bytes = 0
     verified_parent_ids: dict[str, str] = {}
+    candidate_lists: dict[tuple[str, str], tuple[HunkCandidate, ...]] = {}
     for commit_id, path, changeset, change in eligible:
         parent_id = changeset.parent_ids[0]
         if commit_id not in verified_parent_ids:
@@ -184,36 +204,70 @@ def add_bounded_git_patch_evidence(
         pathspecs = [path]
         if change.previous_path is not None and change.previous_path != path:
             pathspecs.append(change.previous_path)
-        diff_args = (
-            "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv",
-            "--no-color", "--no-indent-heuristic", "--find-renames=50%",
-            "--unified=3", parent_id, commit_id, "--", *pathspecs,
-        )
+        diff_args = _patch_diff_args(parent_id, commit_id, pathspecs, 3)
         patch_read = _run_git_limited(root_path, diff_args, MAX_COMMAND_STDOUT_BYTES)
         reads += 1
         if patch_read.returncode != 0 and not patch_read.truncated:
             raise ValueError(f"Cannot read historical patch for {commit_id}:{path}")
-        hunk = _first_small_complete_hunk(
+        candidates = _complete_hunk_candidates(
             patch_read.stdout, repository_id=history.repository_id,
             commit_id=commit_id, parent_id=parent_id,
             path=path,
             expected_old_path=change.previous_path or path,
             previous_path=change.previous_path,
         )
-        if hunk is None:
-            reason = "stdout_budget" if patch_read.truncated else "no_short_complete_text_hunk"
-            skipped.append(GitPatchSkip(commit_id, path, reason))
+        key = (commit_id, path)
+        candidate_lists[key] = candidates
+        if patch_read.truncated or not candidates:
+            unavailable[key] = (
+                "stdout_budget" if patch_read.truncated
+                else "no_short_complete_text_hunk"
+            )
+
+    reads = _retry_compact_context_hunks(
+        root_path, history.repository_id, comparison_requests, changesets,
+        eligible_by_key, candidate_lists, unavailable, reads,
+    )
+
+    selected, comparison_blocked = select_compared_hunks(
+        comparison_requests,
+        changesets, candidate_lists, unavailable, MAX_REFERENCE_BYTES,
+    )
+    capacity_skipped: set[tuple[str, str]] = set()
+    delivered_reference_bytes = 0
+    for commit_id, path, _, _ in eligible:
+        key = (commit_id, path)
+        candidate = selected.get(key)
+        if candidate is None:
+            if key in comparison_blocked:
+                skipped.append(GitPatchSkip(commit_id, path, "comparison_incomplete"))
+            elif key in unavailable:
+                skipped.append(GitPatchSkip(commit_id, path, unavailable[key]))
+            else:
+                skipped.append(GitPatchSkip(commit_id, path, "no_short_complete_text_hunk"))
             continue
-        evidence, serialized_size = hunk
+        evidence, serialized_size = candidate.evidence, candidate.serialized_size
+        if candidate.anchor is not None and any(
+            key[1] == descendant[1]
+            and selected.get(descendant) is not None
+            and selected[descendant].anchor == candidate.anchor
+            and descendant in capacity_skipped
+            and is_ancestor(key[0], descendant[0], changesets)
+            for descendant in comparison_requests
+        ):
+            skipped.append(GitPatchSkip(commit_id, path, "comparison_incomplete"))
+            continue
+        if delivered_reference_bytes + serialized_size > MAX_TOTAL_REFERENCE_BYTES:
+            skipped.append(GitPatchSkip(commit_id, path, "reference_byte_budget"))
+            capacity_skipped.add(key)
+            continue
+        delivered_reference_bytes += serialized_size
         existing = existing_by_id.get(evidence.evidence_id)
         if existing is not None:
             if existing != evidence:
                 raise ValueError("Existing git_patch Evidence conflicts with Git content")
             evidence = existing
         else:
-            if total_new_bytes + serialized_size > MAX_TOTAL_REFERENCE_BYTES:
-                skipped.append(GitPatchSkip(commit_id, path, "reference_byte_budget"))
-                continue
             new_evidence_by_id[evidence.evidence_id] = evidence
             existing_by_id[evidence.evidence_id] = evidence
             total_new_bytes += serialized_size
@@ -221,7 +275,11 @@ def add_bounded_git_patch_evidence(
 
     if reads > MAX_GIT_READS:
         raise AssertionError("Git read budget implementation error")
-    if not additions_by_file:
+    selected_ids = {
+        item.evidence_id for items in additions_by_file.values() for item in items
+    }
+    stale_ids = _requested_patch_ids(history, seen, selected_ids)
+    if not additions_by_file and not stale_ids:
         return BoundedGitPatchEvidenceResult(history, (), tuple(skipped), reads, 0)
 
     enriched_changesets: list[ChangeSet] = []
@@ -233,18 +291,26 @@ def add_bounded_git_patch_evidence(
             new_ids = tuple(sorted({item.evidence_id for item in additions}))
             updated = replace(
                 change,
-                evidence_ids=tuple(dict.fromkeys((*change.evidence_ids, *new_ids))),
+                evidence_ids=tuple(dict.fromkeys((
+                    *(item for item in change.evidence_ids if item not in stale_ids),
+                    *new_ids,
+                ))),
             )
             updated_files.append(updated)
             change_ids.extend(new_ids)
         updated_change_ids = tuple(
-            dict.fromkeys((*changeset.evidence_ids, *sorted(set(change_ids))))
+            dict.fromkeys((
+                *(item for item in changeset.evidence_ids if item not in stale_ids),
+                *sorted(set(change_ids)),
+            ))
         )
         enriched_changesets.append(replace(
             changeset, files=tuple(updated_files), evidence_ids=updated_change_ids,
         ))
 
     all_evidence = dict(existing_by_id)
+    for evidence_id in stale_ids:
+        all_evidence.pop(evidence_id, None)
     enriched_history = GitHistoryResult(
         history.repository_id,
         tuple(enriched_changesets),
@@ -257,6 +323,98 @@ def add_bounded_git_patch_evidence(
         reads,
         total_new_bytes,
     )
+
+
+def _requested_patch_ids(
+    history: GitHistoryResult,
+    requested_pairs: set[tuple[str, str]],
+    selected_ids: set[str],
+) -> set[str]:
+    return {
+        item.evidence_id for item in history.evidence
+        if item.provenance == "git_patch"
+        and (item.location.commit, item.location.path) in requested_pairs
+        and item.evidence_id not in selected_ids
+    }
+
+
+def _without_evidence_ids(
+    history: GitHistoryResult, removed_ids: set[str],
+) -> GitHistoryResult:
+    changesets = []
+    for changeset in history.changesets:
+        files = tuple(replace(
+            change,
+            evidence_ids=tuple(item for item in change.evidence_ids
+                               if item not in removed_ids),
+        ) for change in changeset.files)
+        changesets.append(replace(
+            changeset, files=files,
+            evidence_ids=tuple(item for item in changeset.evidence_ids
+                               if item not in removed_ids),
+        ))
+    return GitHistoryResult(
+        history.repository_id, tuple(changesets),
+        tuple(item for item in history.evidence if item.evidence_id not in removed_ids),
+    )
+
+
+def _patch_diff_args(
+    parent_id: str, commit_id: str, pathspecs: list[str], context_lines: int,
+) -> tuple[str, ...]:
+    return (
+        "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv",
+        "--no-color", "--no-indent-heuristic", "--find-renames=50%",
+        f"--unified={context_lines}", parent_id, commit_id, "--", *pathspecs,
+    )
+
+
+def _retry_compact_context_hunks(
+    root: Path,
+    repository_id: str,
+    requests: list[tuple[str, str]],
+    changesets: dict[str, ChangeSet],
+    items_by_key: dict[tuple[str, str], tuple[str, str, ChangeSet, FileChange]],
+    candidates_by_key: dict[tuple[str, str], tuple[HunkCandidate, ...]],
+    unavailable: dict[tuple[str, str], str],
+    reads: int,
+) -> int:
+    """Retry only oversized direct-parent matches, with the same guarded Git args."""
+    for key in compact_context_requests(
+        requests, changesets, candidates_by_key, MAX_REFERENCE_BYTES,
+    ):
+        if key in unavailable:
+            continue
+        if reads >= MAX_GIT_READS:
+            unavailable[key] = "compact_context_read_budget"
+            continue
+        commit_id, path, changeset, change = items_by_key[key]
+        parent_id = changeset.parent_ids[0]  # already verified on the first read
+        pathspecs = [path]
+        if change.previous_path is not None and change.previous_path != path:
+            pathspecs.append(change.previous_path)
+        patch_read = _run_git_limited(
+            root, _patch_diff_args(parent_id, commit_id, pathspecs, 1),
+            MAX_COMMAND_STDOUT_BYTES,
+        )
+        reads += 1
+        if patch_read.returncode != 0 and not patch_read.truncated:
+            raise ValueError(f"Cannot read compact historical patch for {commit_id}:{path}")
+        compact_candidates = _complete_hunk_candidates(
+            patch_read.stdout, repository_id=repository_id,
+            commit_id=commit_id, parent_id=parent_id, path=path,
+            expected_old_path=change.previous_path or path,
+            previous_path=change.previous_path,
+        )
+        candidates_by_key[key] = compact_candidates
+        if patch_read.truncated or not compact_candidates:
+            unavailable[key] = (
+                "stdout_budget" if patch_read.truncated
+                else "no_short_complete_text_hunk"
+            )
+        else:
+            unavailable.pop(key, None)
+    return reads
 
 
 def validate_git_patch_evidence(
@@ -312,14 +470,38 @@ def _first_small_complete_hunk(
     expected_old_path: str,
     previous_path: str | None,
 ) -> tuple[Evidence, int] | None:
+    candidates = _complete_hunk_candidates(
+        patch, repository_id=repository_id, commit_id=commit_id,
+        parent_id=parent_id, path=path,
+        expected_old_path=expected_old_path, previous_path=previous_path,
+    )
+    fitting = [candidate for candidate in candidates
+               if candidate.serialized_size <= MAX_REFERENCE_BYTES]
+    if not fitting:
+        return None
+    selected = min(fitting, key=lambda item: (item.priority, item.hunk_order))
+    return selected.evidence, selected.serialized_size
+
+
+def _complete_hunk_candidates(
+    patch: bytes,
+    *,
+    repository_id: str,
+    commit_id: str,
+    parent_id: str,
+    path: str,
+    expected_old_path: str,
+    previous_path: str | None,
+) -> tuple[HunkCandidate, ...]:
+    """Collect every complete exact-path hunk, including oversized candidates."""
     try:
         text = patch.decode("utf-8", errors="strict")
     except UnicodeDecodeError:
-        return None
+        return ()
     lines = text.splitlines(keepends=True)
     index = 0
     hunk_order = 0
-    selected: tuple[int, int, Evidence, int] | None = None
+    candidates: list[HunkCandidate] = []
     old_header_path: str | None = None
     new_header_path: str | None = None
     while index < len(lines):
@@ -373,14 +555,11 @@ def _first_small_complete_hunk(
             provenance="git_patch",
         )
         serialized_size = _serialized_evidence_size(item)
-        if serialized_size <= MAX_REFERENCE_BYTES:
-            candidate = (_hunk_selection_priority(hunk_text), this_hunk_order,
-                         item, serialized_size)
-            if selected is None or candidate[:2] < selected[:2]:
-                selected = candidate
-    if selected is None:
-        return None
-    return selected[2], selected[3]
+        candidates.append(HunkCandidate(
+            item, serialized_size, _hunk_selection_priority(hunk_text),
+            this_hunk_order, function_anchor(hunk_text),
+        ))
+    return tuple(candidates)
 
 
 def _hunk_selection_priority(hunk_text: str) -> int:

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 — 2026-10-17
+
+- Sync the retained implementation, with separated knowledge selection, reading, rendering, delivery and tracing responsibilities.
+- Repair bounded historical correction evidence, semantic workflow classification and reference binding.
+- Preserve all production input/read/reference budgets and existing public CLI aliases.
+- Expand the selected offline release regression and record current source hashes.
+- Document unchanged historical task scores and unresolved quality/cost limits; no overall uplift claim or new paid evaluation.
+
+See [checkpoint details](docs/checkpoint-20261017.md), [source provenance](docs/release-provenance.json), and [release checks](docs/release-checks.json).
+
 ## 0.1.0 — 2026-10-11
 
 Initial public RepoEngram snapshot from the validated repository-memory implementation.

@@ -1,0 +1,107 @@
+{
+  "date": "2026-10-17",
+  "scope": "Three related historical Sales tasks, mixed versions, after quota-interrupted continuation; not fresh single-call native/enhanced pairs.",
+  "new_independent_tasks": 0,
+  "new_uplift_cases": 0,
+  "lost_previous_passes": 0,
+  "local_targeted_regression": {
+    "passed": 133,
+    "failed": 0
+  },
+  "rows": [
+    {
+      "case": "SalesBB5",
+      "previous_groups": {
+        "hidden": {
+          "passed": 9,
+          "total": 9
+        },
+        "original": {
+          "passed": 52,
+          "total": 53
+        }
+      },
+      "current_groups": {
+        "hidden": {
+          "passed": 9,
+          "total": 9,
+          "failed": 0
+        },
+        "original": {
+          "passed": 52,
+          "total": 53,
+          "failed": 1
+        }
+      },
+      "lost_previous_passes": [],
+      "newly_passing_checks": [],
+      "actor_seconds": 152.92693239997607,
+      "same_package_as_previous": false
+    },
+    {
+      "case": "SalesReviewerNotes",
+      "previous_groups": {
+        "hidden": {
+          "passed": 6,
+          "total": 6
+        },
+        "original": {
+          "passed": 75,
+          "total": 76
+        }
+      },
+      "current_groups": {
+        "hidden": {
+          "passed": 6,
+          "total": 6,
+          "failed": 0
+        },
+        "original": {
+          "passed": 75,
+          "total": 76,
+          "failed": 1
+        }
+      },
+      "lost_previous_passes": [],
+      "newly_passing_checks": [],
+      "actor_seconds": 175.09507149999263,
+      "same_package_as_previous": true
+    },
+    {
+      "case": "SalesNestedSynthesisBoundary",
+      "previous_groups": {
+        "hidden": {
+          "passed": 2,
+          "total": 6
+        },
+        "original": {
+          "passed": 75,
+          "total": 76
+        }
+      },
+      "current_groups": {
+        "hidden": {
+          "passed": 2,
+          "total": 6,
+          "failed": 4
+        },
+        "original": {
+          "passed": 75,
+          "total": 76,
+          "failed": 1
+        }
+      },
+      "lost_previous_passes": [],
+      "newly_passing_checks": [],
+      "actor_seconds": 587.9445780999959,
+      "same_package_as_previous": true
+    }
+  ],
+  "limits": [
+    "Same repository and related task family, not a broad stability estimate.",
+    "Nested synthesis remains 2/6; record schema ambiguity retained.",
+    "Extra continuation call and historical package differences prevent isolated version attribution.",
+    "Nested synthesis runtime and input consumption increased; no stable cost or speed improvement.",
+    "No supported overall 25% enhancement claim."
+  ]
+}

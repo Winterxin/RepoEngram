@@ -33,7 +33,7 @@ from skillforge.domain.semantic_workflow import (
 from skillforge.domain.static_analysis import StaticAnalysisResult
 from skillforge.domain.workflow import WorkflowCandidate, WorkflowCandidateResult
 from skillforge.errors import SemanticDecisionValidationError
-from skillforge.repository.semantic_references import cited_rejection_symbols
+from skillforge.repository.semantic_references import cited_prose_filenames, cited_rejection_symbols
 
 CONFIDENCE_METHOD = "llm_semantic_workflow_v1"
 
@@ -360,11 +360,15 @@ def _validate_text_claims(
     allowed_modules: set[str],
     allowed_paths: set[str],
     rejection_symbols: frozenset[str] = frozenset(),
+    mentioned_paths: frozenset[str] = frozenset(),
+    cited_evidence_ids: frozenset[str] = frozenset(),
 ) -> None:
     for claim in claims:
         if not isinstance(claim, str):
             raise ValueError("semantic claims must be strings")
         for commit_token in _COMMIT_TOKEN.findall(claim):
+            if commit_token in cited_evidence_ids:
+                continue  # Exact, validated Evidence IDs are not Git commit references.
             normalized = commit_token.lower()
             if not any(commit.lower().startswith(normalized) for commit in allowed_commits):
                 raise ValueError(f"model text references unknown commit: {commit_token}")
@@ -374,7 +378,8 @@ def _validate_text_claims(
             # Preserve exact known references before stripping prose punctuation.
             if path_token not in allowed_paths and path_token not in allowed_modules:
                 path_token = path_token.rstrip(".")
-            if path_token not in allowed_paths and path_token not in allowed_modules:
+            if (path_token not in allowed_paths and path_token not in allowed_modules
+                    and path_token not in mentioned_paths):
                 raise ValueError(
                     f"model text references unknown path: {path_token}; use only exact "
                     "supplied paths. Write operation alternatives with 'or' and function "
@@ -396,9 +401,13 @@ def _validate_text_references(
     allowed_commits: set[str],
     allowed_modules: set[str],
     allowed_paths: set[str],
+    mentioned_paths: frozenset[str] = frozenset(),
+    cited_evidence_ids: frozenset[str] = frozenset(),
 ) -> None:
     _validate_text_claims(
-        _text_claims(response), allowed_commits, allowed_modules, allowed_paths
+        _text_claims(response), allowed_commits, allowed_modules, allowed_paths,
+        mentioned_paths=mentioned_paths,
+        cited_evidence_ids=cited_evidence_ids,
     )
 
 
@@ -630,7 +639,12 @@ def _validate_response(
         allowed_paths | _allowed_directories(allowed_paths),
         "path",
     )
-    _validate_text_references(response, allowed_commits, allowed_modules, allowed_paths)
+    _validate_text_references(
+        response, allowed_commits, allowed_modules, allowed_paths,
+        cited_prose_filenames(request.evidence, request.family_supporting_commits,
+                              referenced_evidence, _PATH_TOKEN),
+        cited_evidence_ids=frozenset(referenced_evidence),
+    )
 
     draft_id = hashlib.sha256(
         f"{CONFIDENCE_METHOD}\0{request.repository_id}\0{request.candidate_id}".encode()
@@ -693,6 +707,10 @@ def _validate_decision(
         cited_rejection_symbols(
             request.evidence, request.family_supporting_commits, evidence_ids, _PATH_TOKEN
         ) if response.decision != SemanticDecisionKind.WORKFLOW else frozenset(),
+        mentioned_paths=cited_prose_filenames(
+            request.evidence, request.family_supporting_commits, evidence_ids, _PATH_TOKEN,
+        ),
+        cited_evidence_ids=frozenset(evidence_ids),
     )
     if response.decision == SemanticDecisionKind.WORKFLOW:
         if response.workflow is None:

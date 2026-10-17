@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import subprocess
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
 from skillforge.domain.change import ChangeSet, FileChange, FileChangeKind, GitHistoryResult
@@ -145,16 +146,32 @@ class GitHistoryMiner:
         changesets = []
         all_evidence: dict[str, Evidence] = {}
         for commit in commits:
+            boundary = False
+            if not commit.parent_ids:
+                # Git's shallow traversal reports the boundary as parentless even
+                # though its commit object retains the real, unavailable parents.
+                raw = self._run_git(root, "cat-file", "-p", commit.commit_id)
+                header = self._stdout_text(raw).split("\n\n", 1)[0]
+                parents = tuple(line.removeprefix("parent ") for line in header.splitlines()
+                                if line.startswith("parent "))
+                if parents:
+                    commit = replace(commit, parent_ids=parents)
+                    boundary = True
             commit_evidence = self._make_evidence(
                 repository_id,
                 commit.commit_id,
                 ".",
                 "git_log",
-                f"Observed Git commit {commit.commit_id}",
+                f"Observed Git commit {commit.commit_id}" + (
+                    "; history boundary: parent diff unavailable; no file changes inferred"
+                    if boundary else ""
+                ),
             )
             all_evidence[commit_evidence.evidence_id] = commit_evidence
             try:
-                parsed_files, numstat = self._read_file_changes(root, commit)
+                parsed_files, numstat = (
+                    ((), {}) if boundary else self._read_file_changes(root, commit)
+                )
             except (UnicodeDecodeError, ValueError) as error:
                 raise GitHistoryError(
                     f"Cannot parse Git diff for commit {commit.commit_id}: {error}"

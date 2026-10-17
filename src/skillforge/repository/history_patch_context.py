@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from skillforge.domain.change import ChangePatternKind, FileChangeKind
+from skillforge.repository.bounded_candidate_selection import scoped_candidates
 from skillforge.repository.bounded_git_patch_evidence import (
     add_bounded_git_patch_evidence,
     validate_git_patch_evidence,
@@ -46,10 +47,12 @@ def strip_git_patch_evidence(history):
 
 
 def enrich_selected_history(root, history, facts, workflow_candidates, negative_candidates,
-                            *, workflow_limit=5, anti_pattern_limit=5):
+                            *, workflow_limit=5, anti_pattern_limit=5, current_module=None):
     """Keep quotas unchanged and share finite patch examples across existing candidates."""
-    workflow = select_semantic_candidates(workflow_candidates, limit=workflow_limit)
-    negative = select_semantic_antipattern_candidates(negative_candidates, limit=anti_pattern_limit)
+    workflow = select_semantic_candidates(
+        scoped_candidates(workflow_candidates, facts, current_module), limit=workflow_limit)
+    negative = select_semantic_antipattern_candidates(
+        scoped_candidates(negative_candidates, facts, current_module), limit=anti_pattern_limit)
     paths_by_module = {module.module: module.path for module in facts.modules}
     groups = []
 

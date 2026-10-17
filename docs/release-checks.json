@@ -1,25 +1,26 @@
 {
-  "checked_source_commit": "4fad887b0b77300042ac49307d3de5544d45bf90",
-  "production_files_exact_git_blob_match": 101,
+  "checked_source_commit": "3d1a4364b3323bf46c802dbeb192f1b11c20a702",
+  "production_files_lf_normalized_match": 125,
   "package_distribution": "repoengram",
-  "package_version": "0.1.0",
-  "fresh_venv_install": "PASSED_WITH_NO_RUNTIME_DEPENDENCIES",
-  "cli_aliases": [
-    "repoengram",
-    "skillforge"
-  ],
-  "installed_analyze": "PASS",
-  "installed_connect": "PASS",
-  "regression_passed": 129,
+  "package_version": "0.1.1",
+  "checked_utc": "2026-10-17T04:30:16.193554+00:00",
+  "regression_passed": 267,
   "regression_skipped": [
     {
+      "classname": "tests.test_repo_local_integration",
       "name": "test_symlink_collision_and_root_escape_fail",
       "reason": "symlink creation unavailable"
     }
   ],
   "regression_failed": [],
-  "regression_seconds": 145.88,
+  "regression_seconds": 196.408,
+  "command": "python -m pytest --basetemp=.artifacts/release-20261017/tmp --junitxml=.artifacts/release-20261017/release.xml",
+  "validation_scope": "22 explicitly selected offline test files in pyproject.toml; not the entire private campaign suite.",
   "real_model_starts": 0,
-  "initial_temp_permission_errors_retained_locally": true,
-  "xml_sha256": "8d378fb03d4e878ef9949234a765767a2612e5f3366a66a7d78302d9d83383cd"
+  "wheel_build": "PASS: pip wheel --no-deps --no-build-isolation",
+  "wheel_sha256": "e3c3d5b1ecdc6e872056ea8a5e56cb5f196a3a649f59d6a9793d7f62a3406089",
+  "wheel_entry_point_aliases_preserved": true,
+  "fresh_venv_install": "NOT_RERUN; previous release checks kept separately",
+  "portable_junit_file": "docs/release-regression-20261017.xml",
+  "portable_junit_sha256": "0f65c5f649566bd2b64c70c363f2dc4dc9af9c4c65af10c8570f10f6541a4f58"
 }

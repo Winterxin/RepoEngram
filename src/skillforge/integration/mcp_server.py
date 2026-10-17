@@ -18,6 +18,7 @@ from skillforge.filesystem_safety import no_symlink
 from skillforge.integration.agent_skills import AgentSkillExporter
 from skillforge.integration.autonomous import SNAPSHOT, load_snapshot, repo_root
 from skillforge.integration.current_integration import current_integration
+from skillforge.integration.knowledge_trace import KnowledgeTrace
 from skillforge.integration.scoped_risks import discovery_with_risks
 from skillforge.repository.identity import repository_identity
 from skillforge.repository.skill_router import SkillRouter
@@ -132,6 +133,7 @@ class ProjectTools:
         self.root = repo_root(cwd)
         self.dna, self.registry, self.base = load_snapshot(self.root)
         self.route = None
+        self.knowledge_trace = None
         self.read_ids = set()
         self.read_risk_ids = set()
         self.search_routes = {}
@@ -182,6 +184,10 @@ class ProjectTools:
             task = arguments["task" if name == "get_related_workflow" else "query"]
             route = SkillRouter().route(self.registry, SkillRoutingRequest(
                 self.registry.repository_id, task, **scope))
+            if self.knowledge_trace is None or (
+                name == "get_related_workflow" and self.route != route
+            ):
+                self.knowledge_trace = KnowledgeTrace(route.repository_id)
             # Additional rule searches must not replace the task's Verify obligations.
             if name == "get_related_workflow":
                 if self.route != route:
@@ -199,6 +205,14 @@ class ProjectTools:
                                 "reasons": [reason.value for reason in match.match_reasons]}
                                for match in route.matches],
                     "router_trace": routing_trace(self.registry, route)}
+            for candidate in response["router_trace"]["candidates"]:
+                self.knowledge_trace.record(
+                    "routing", "SELECTED" if candidate["selected"]
+                    else candidate["non_selection_reason"], object_id=candidate["skill_id"],
+                )
+            self.knowledge_trace.finish("routing", "MATCHED" if route.matches else "NO_MATCH",
+                                        object_id=route.registry_id)
+            self.knowledge_trace.persist(self.root)
             return discovery_with_risks(response, self.dna, route, scope, self.read_risk_ids)
         if name == "get_skill":
             if self.route is None:
@@ -217,12 +231,16 @@ class ProjectTools:
             skill = next((m.skill for m in route.matches if m.skill.skill_id == skill_id), None)
             if skill is None:
                 raise ValueError("Skill not selected for this repository task")
+            if self.knowledge_trace is None:
+                self.knowledge_trace = KnowledgeTrace(route.repository_id)
             already_read = skill_id in self.read_ids
             files = {}
             integration = None
             if not already_read or arguments.get("refresh", False):
-                packages = AgentSkillExporter().plan(route, CodeAgentTarget.CODEX).packages
-                package = next(item for item in packages if item.source_skill_id == skill_id)
+                package = AgentSkillExporter().package(
+                    route, CodeAgentTarget.CODEX, skill_id, repository_root=self.root,
+                    trace=self.knowledge_trace,
+                )
                 files = {file.relative_path: file.content for file in package.files
                          if file.relative_path != ".skillforge.json"}
                 integration = current_integration(
@@ -231,6 +249,17 @@ class ProjectTools:
             self.read_ids.add(skill_id)
             if route is not self.route:
                 self.consumed_routes[skill_id] = route
+            self.knowledge_trace.record(
+                "tool_response", "CONTENT_RETURNED" if files else "ALREADY_READ_RECEIPT",
+                object_id=skill_id, evidence_ids=skill.evidence_ids,
+                output_bytes=sum(len(text.encode("utf-8")) for text in files.values()),
+            )
+            self.knowledge_trace.finish(
+                "get_skill", "CONTENT_RETURNED" if files else "ALREADY_READ_RECEIPT",
+                object_id=skill_id,
+                output_bytes=sum(len(text.encode("utf-8")) for text in files.values()),
+            )
+            self.knowledge_trace.persist(self.root)
             return {"repository_id": self.registry.repository_id,
                     "skill_id": skill_id, "version": skill.version, "already_read": already_read,
                     "read_policy": "Use this task/version's content already read; "

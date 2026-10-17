@@ -236,9 +236,14 @@ class EvolutionHistoryState:
     history: GitHistoryResult
     workflow_candidates: WorkflowCandidateResult
     antipattern_candidates: NegativePatternCandidateResult
+    current_module: str | None = field(default=None, metadata={"omit_none": True})
     state_id: str = field(init=False)
 
     def __post_init__(self) -> None:
+        if self.current_module is not None and (
+            not isinstance(self.current_module, str) or not self.current_module.strip()
+        ):
+            raise ValueError("history selection module must be nonempty")
         if (isinstance(self.max_commits, bool) or not isinstance(self.max_commits, int)
                 or self.max_commits < 1):
             raise ValueError("max_commits must be positive")
@@ -256,7 +261,8 @@ class EvolutionHistoryState:
             raise ValueError("negative candidates have a different history window")
         object.__setattr__(self, "state_id", fingerprint(("evolution-history-v1",
             self.repository_id, self.head_commit, self.max_commits, self.history,
-            self.workflow_candidates, self.antipattern_candidates)))
+            self.workflow_candidates, self.antipattern_candidates)
+            + ((self.current_module,) if self.current_module is not None else ())))
 
     def to_dict(self) -> dict[str, object]:
         return to_json_value(self)
@@ -404,6 +410,7 @@ class EvolutionPlan:
                     target_state.head_commit,
                     target_state.max_commits,
                     self.production.static_facts,
+                    current_module=target_state.current_module,
                 )
             ):
                 raise ValueError("production refresh decisions differ from source dependencies")

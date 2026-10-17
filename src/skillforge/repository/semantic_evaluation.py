@@ -69,6 +69,14 @@ def _select_channel_candidates(
 ) -> tuple[WorkflowCandidate, ...]:
     selected: list[WorkflowCandidate] = []
     remaining = list(candidates)
+    units_by_identity = {id(candidate): _candidate_units(candidate) for candidate in candidates}
+    co_change_kinds = {ChangePatternKind.FILE_CO_CHANGE, ChangePatternKind.MODULE_CO_CHANGE}
+    duplicate_keys = {
+        id(candidate): (units_by_identity[id(candidate)], frozenset(candidate.supporting_commits))
+        if candidate.kind in co_change_kinds and units_by_identity[id(candidate)]
+        and candidate.supporting_commits else None
+        for candidate in candidates
+    }
     deferred_duplicates: list[WorkflowCandidate] = []
     covered_units: set[tuple[str, str]] = set()
     miner_rank = {candidate.candidate_id: rank for rank, candidate in enumerate(candidates)}
@@ -76,7 +84,7 @@ def _select_channel_candidates(
         if not selected:
             candidate = remaining.pop(0)
             selected.append(candidate)
-            covered_units.update(_candidate_units(candidate))
+            covered_units.update(units_by_identity[id(candidate)])
             reasons[candidate.candidate_id] = (
                 "selected as the highest-support channel representative"
             )
@@ -84,13 +92,14 @@ def _select_channel_candidates(
 
         # Exact equivalents are held for quota refill, with a module representative
         # replacing a file candidate only when its support is at least as strong.
-        index = 0
-        while index < len(remaining):
-            candidate = remaining[index]
+        distinct = []
+        for candidate in remaining:
+            key = duplicate_keys[id(candidate)]
             duplicate_index = next((position for position, previous in enumerate(selected)
-                                    if _module_commit_duplicate(candidate, previous)), None)
+                                    if key is not None
+                                    and key == duplicate_keys[id(previous)]), None)
             if duplicate_index is None:
-                index += 1
+                distinct.append(candidate)
                 continue
             previous = selected[duplicate_index]
             prefer_module = (
@@ -112,7 +121,7 @@ def _select_channel_candidates(
                 reasons[candidate.candidate_id] = (
                     f"exact duplicate of selected candidate {previous.candidate_id}"
                 )
-            remaining.pop(index)
+        remaining = distinct
 
         if not remaining:
             break
@@ -120,14 +129,14 @@ def _select_channel_candidates(
             break
 
         def score(candidate: WorkflowCandidate) -> tuple[Fraction, int, int]:
-            units = _candidate_units(candidate)
+            units = units_by_identity[id(candidate)]
             novelty = Fraction(len(units - covered_units), len(units)) if units else Fraction(0)
             return novelty, candidate.support.supporting, -miner_rank[candidate.candidate_id]
 
-        candidate = max(remaining, key=score)
-        remaining.remove(candidate)
+        winner = max(range(len(remaining)), key=lambda index: score(remaining[index]))
+        candidate = remaining.pop(winner)
         selected.append(candidate)
-        covered_units.update(_candidate_units(candidate))
+        covered_units.update(units_by_identity[id(candidate)])
         reasons[candidate.candidate_id] = (
             "selected for new member coverage; support rank breaks ties"
         )

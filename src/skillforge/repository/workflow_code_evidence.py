@@ -87,6 +87,7 @@ class WorkflowCodeEvidence:
                         raise ValueError("Workflow implementation Evidence locator mismatch")
                     size = _reference_size(item)
                     if (symbol.kind in {PythonSymbolKind.FUNCTION, PythonSymbolKind.ASYNC_FUNCTION}
+                            and module.module is not None
                             and symbol.qualified_name.startswith(module.module + ".")
                             and "." not in symbol.qualified_name[len(module.module) + 1:]):
                         tree = ast.parse(item.description[len(prefix):])

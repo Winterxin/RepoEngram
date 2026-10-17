@@ -1,11 +1,11 @@
 """Assemble independent validated semantic results without weakening their gates."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TypeVar
 
 from skillforge.domain.change import ChangePatternKind
-from skillforge.domain.evidence import Evidence
+from skillforge.domain.evidence_merge import merge_evidence as _merge_evidence
 from skillforge.domain.semantic_antipattern import SemanticAntiPatternResult
 from skillforge.domain.semantic_structural_rule import SemanticStructuralRuleResult
 from skillforge.domain.semantic_tendency import SemanticTendencyResult
@@ -46,17 +46,6 @@ def _retry_invalid_decision(evaluate: Callable[[], ResultT], observed=None) -> t
         if observed is not None:
             observed.note_validation_failure(error)
         return evaluate(), 1
-
-
-def _merge_evidence(results: Iterable) -> tuple[Evidence, ...]:
-    merged: dict[str, Evidence] = {}
-    for result in results:
-        for item in result.evidence:
-            prior = merged.get(item.evidence_id)
-            if prior is not None and prior != item:
-                raise ValueError(f"conflicting semantic Evidence ID: {item.evidence_id}")
-            merged[item.evidence_id] = item
-    return tuple(merged[key] for key in sorted(merged))
 
 
 class _ModelFailure(RuntimeError):
@@ -200,6 +189,58 @@ def _checkpoint_validated_candidate(observed, candidate_id, result, fields):
             observed.checkpointed_ids = {*getattr(observed, "checkpointed_ids", ()), candidate_id}
             return
         model = getattr(model, "model", None)
+
+
+def _prefetch_candidate_repairs(preliminary, requests, models):
+    """Share existing fallback transports; keep each candidate's retry allowance.
+
+    Only already observed batch failures qualify. Missing envelopes and opaque
+    transports retain their original paths. Valid siblings were checkpointed by
+    the first sweep and are never sent to a repair transport.
+    """
+    groups = {}
+    for channel, items in requests.items():
+        model = models[channel]
+        if not isinstance(model, PrefetchedSemanticModel):
+            continue
+        repair = []
+        for request in items:
+            candidate_id = getattr(request, "context", request).candidate_id
+            prior = preliminary.get((channel, candidate_id))
+            if prior is None:
+                continue
+            observed, result, error = prior
+            if error is None and not getattr(result, "failures", ()):
+                continue
+            if observed.validation_feedback and hasattr(request, "validation_feedback"):
+                request = replace(request, validation_feedback=
+                    observed.validation_feedback.encode("utf-8")[:512].decode(
+                        "utf-8", errors="ignore"))
+            repair.append(request)
+        if repair:
+            groups[channel] = (model.model, tuple(repair))
+    if sum(len(items) for _, items in groups.values()) < 2:
+        return
+    budgets = [getattr(getattr(model, "model", model), "effect_budget", None)
+               for model, _ in groups.values()]
+    if any(getattr(budget, "cold_shape", None) is not None for budget in budgets):
+        # Exact-shape campaign plans describe the complete cold cohort. Do not
+        # reinterpret their declared population as a partial repair cohort.
+        return
+    from skillforge.repository.semantic_cohort import prefetch_semantic_cohort
+
+    repaired = prefetch_semantic_cohort(groups)
+    if repaired is None:
+        repaired = {
+            channel: prefetch_semantic_batch(model, items)
+            for channel, (model, items) in groups.items()
+        }
+    for channel, (_, items) in groups.items():
+        for request in items:
+            candidate_id = getattr(request, "context", request).candidate_id
+            # _evaluate_candidate still performs the original full validation,
+            # counts the same retry, and retains both raw attempts on failure.
+            preliminary[channel, candidate_id][0].model = repaired[channel]
 
 
 def evaluate_semantic_knowledge(
@@ -360,6 +401,14 @@ def evaluate_semantic_knowledge(
             ),
             ("accepted", "rejections"),
         )
+
+    _prefetch_candidate_repairs(
+        preliminary,
+        {"workflow": workflow_requests, "tendency": tendency_requests,
+         "anti-pattern": anti_requests, "structural": structural_requests},
+        {"workflow": workflow_model, "tendency": tendency_model,
+         "anti-pattern": anti_pattern_model, "structural": structural_model},
+    )
 
     def observation(channel, candidate_id, model):
         prior = preliminary.get((channel, candidate_id))

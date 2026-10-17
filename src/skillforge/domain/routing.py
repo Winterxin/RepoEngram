@@ -169,8 +169,14 @@ def _scope_context(request: SkillRoutingRequest, field: str) -> tuple[str, ...]:
     return () if value is None else (value,)
 
 
-def workflow_intent_tokens(skill: PortableProjectSkill) -> tuple[str, ...]:
-    """Content of executable actions, excluding generic edits and declared locations."""
+def workflow_intent_tokens(
+    skill: PortableProjectSkill, *, include_conditions: bool = True,
+) -> tuple[str, ...]:
+    """Action/condition discovery tokens, excluding generic edits and locations.
+
+    Conditions remain discovery signals. Action-only tokens can distinguish an
+    explicitly different helper without discarding conditional business subjects.
+    """
     if not isinstance(skill, ProjectSkill) or skill.procedure is None:
         return ()
     location = {word for selector in skill.trigger.scope.selectors
@@ -182,7 +188,8 @@ def workflow_intent_tokens(skill: PortableProjectSkill) -> tuple[str, ...]:
                  if word.isascii() and word.endswith("y")}
     content = " ".join((skill.trigger.task_description,
                         *(text for step in skill.procedure.steps
-                          for text in (step.instruction, step.condition or ""))))
+                          for text in (step.instruction,
+                                       (step.condition or "") if include_conditions else ""))))
     return tuple(sorted(_intent_tokens(content) - location))
 
 
@@ -211,7 +218,22 @@ def _workflow_intent_conflicts(skill: PortableProjectSkill, request: SkillRoutin
         location = {word for module in _scope_context(request, "current_module")
                     for word in task_tokens(module)}
         overlap -= location
-    if not intent or overlap:
+    if not intent:
+        return False
+    if overlap:
+        # A condition may be the workflow's only business subject. Preserve that
+        # discovery unless the request explicitly names a different helper and
+        # has no action overlap. No guessed synonyms or call-graph relationships.
+        query_symbols = {word for word in query if word.startswith("_")}
+        if query_symbols:
+            actions = set(workflow_intent_tokens(skill, include_conditions=False))
+            action_symbols = {word for word in actions if word.startswith("_")}
+            action_overlap = actions.intersection(query)
+            if skill.trigger.scope.kind == ProjectScopeKind.REPOSITORY:
+                action_overlap -= location
+            if (action_symbols and action_symbols.isdisjoint(query_symbols)
+                    and not action_overlap):
+                return True
         return False
     # English-only lexical knowledge cannot reject a translated task.
     # Unknown cross-language applicability retains scope-based discovery.
@@ -365,7 +387,7 @@ def routing_trace(registry: SkillRegistry, route: SkillRouteResult) -> dict[str,
         })
     return {
         "schema": "skillforge-router-decision-trace-v1",
-        "algorithm": "lexical-workflow-intent-top-k-v6",
+        "algorithm": "lexical-workflow-intent-top-k-v7",
         "repository_id": registry.repository_id,
         "registry_id": registry.registry_id,
         "source_snapshot_id": registry.source_snapshot_id,

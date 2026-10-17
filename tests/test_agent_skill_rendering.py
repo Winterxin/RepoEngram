@@ -135,6 +135,27 @@ def test_portable_name_and_description_length_boundaries():
         export("x" * (1025 - len(suffix)))
 
 
+def test_large_multi_module_scope_fits_frontmatter_without_losing_body_scope():
+    import json
+
+    from skillforge.domain.project_dna import ProjectScope, ProjectScopeKind
+
+    selectors = tuple(sorted(f"package.subsystem_{i}.{'component_' * 6}" for i in range(40)))
+    item = skill("a", scope=ProjectScope(ProjectScopeKind.MODULE, selectors))
+    registry = SkillRegistryBuilder().build(compilation((item,)))
+    routed = SkillRouter().route(
+        registry, SkillRoutingRequest("repo", "create route", current_module=selectors[0])
+    )
+    plan = AgentSkillExporter().plan(routed, CodeAgentTarget.CODEX)
+    markdown = next(file.content for file in plan.packages[0].files
+                    if file.relative_path == "SKILL.md")
+    description = json.loads(markdown.split("\n", 3)[2].split(": ", 1)[1])
+    assert len(description) <= 1024
+    assert "40 selectors" in description
+    body = markdown.split("\n---\n", 1)[1]
+    assert all(selector in body for selector in selectors)
+
+
 def test_direct_contract_rejects_bad_files_packages_and_plans():
     plan = AgentSkillExporter().plan(route((skill("a"), skill("b"))), CodeAgentTarget.CODEX)
     package = plan.packages[0]
@@ -158,3 +179,22 @@ def test_direct_contract_rejects_bad_files_packages_and_plans():
                     {"packages": plan.packages + plan.packages[:1]}):
         with pytest.raises(ValueError):
             replace(plan, **changes)
+
+
+@pytest.mark.parametrize("target", list(CodeAgentTarget))
+def test_single_package_preserves_canonical_files_and_identity(target):
+    routed = route((complex_skill(), skill("b")))
+    exporter = AgentSkillExporter()
+    expected = exporter.plan(routed, target)
+    for package in expected.packages:
+        assert exporter.package(routed, target, package.source_skill_id) == package
+    with pytest.raises(ValueError, match="not selected"):
+        exporter.package(routed, target, "foreign")
+
+
+def test_single_package_does_not_render_unrequested_sibling():
+    routed = route((skill("a"), skill("b", task="create route " + "x" * 1024)))
+    exporter = AgentSkillExporter()
+    with pytest.raises(ValueError, match="description exceeds"):
+        exporter.plan(routed, CodeAgentTarget.CODEX)
+    assert exporter.package(routed, CodeAgentTarget.CODEX, "a").source_skill_id == "a"

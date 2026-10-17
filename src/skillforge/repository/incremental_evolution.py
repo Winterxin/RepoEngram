@@ -132,6 +132,7 @@ class IncrementalEvolution:
     def make_state(self, history: GitHistoryResult, head_commit: str,
                    max_commits: int, static_analysis: StaticAnalysisResult, *,
                    repo_path: Path | str | None = None,
+                   current_module: str | None = None,
                    ) -> EvolutionHistoryState:
         if len(history.changesets) > max_commits:
             raise ValueError("initial history exceeds max_commits")
@@ -147,6 +148,7 @@ class IncrementalEvolution:
 
             enriched = enrich_selected_history(
                 repo_path, history, static_analysis, workflows, negative,
+                current_module=current_module,
             )
             if enriched.history != history:
                 history = enriched.history
@@ -154,7 +156,7 @@ class IncrementalEvolution:
                 workflows = self.workflow_miner.mine(history, static_analysis, patterns)
                 negative = self.negative_miner.mine(history)
         return EvolutionHistoryState(history.repository_id, head_commit, max_commits,
-                                     history, workflows, negative)
+                                     history, workflows, negative, current_module=current_module)
 
     def advance(self, state: EvolutionHistoryState, delta: GitHistoryDelta,
                 static_analysis: StaticAnalysisResult, *,
@@ -166,7 +168,8 @@ class IncrementalEvolution:
             )
         history = _history_from_delta(state, delta, order)
         return self.make_state(history, delta.head_commit, state.max_commits,
-                               static_analysis, repo_path=repo_path)
+                               static_analysis, repo_path=repo_path,
+                               current_module=state.current_module)
 
     def plan(
         self,
@@ -469,16 +472,20 @@ class IncrementalEvolution:
 def production_inputs(state, facts):
     """Hash original requests in full, including every context and Evidence field."""
     from skillforge.domain.change import ChangePatternKind
-    from skillforge.productization.prepare import (
-        ANTIPATTERN_SEMANTIC_LIMIT,
-        WORKFLOW_SEMANTIC_LIMIT,
+    from skillforge.domain.evidence_merge import merge_evidence as _merge_evidence
+    from skillforge.repository.bounded_candidate_selection import (
+        bounded_structural,
+        scoped_candidates,
     )
-    from skillforge.productization.semantic_assembly import _merge_evidence
     from skillforge.repository.semantic_antipattern_evaluation import (
         select_semantic_antipattern_candidates,
     )
     from skillforge.repository.semantic_antipatterns import build_semantic_antipattern_request
     from skillforge.repository.semantic_evaluation import select_semantic_candidates
+    from skillforge.repository.semantic_policy import (
+        ANTIPATTERN_SEMANTIC_LIMIT,
+        WORKFLOW_SEMANTIC_LIMIT,
+    )
     from skillforge.repository.semantic_structural_rules import build_semantic_structural_request
     from skillforge.repository.semantic_tendencies import build_semantic_tendency_request
     from skillforge.repository.semantic_workflows import build_semantic_workflow_request
@@ -510,10 +517,16 @@ def production_inputs(state, facts):
             )
         )
 
-    for candidate in select_semantic_candidates(
-        state.workflow_candidates,
+    workflows = select_semantic_candidates(
+        scoped_candidates(state.workflow_candidates, facts, state.current_module),
         limit=WORKFLOW_SEMANTIC_LIMIT,
-    ):
+    )
+    anti_patterns = select_semantic_antipattern_candidates(
+        scoped_candidates(state.antipattern_candidates, facts, state.current_module),
+        limit=ANTIPATTERN_SEMANTIC_LIMIT,
+    )
+    mined = bounded_structural(mined, facts, state.current_module, workflows, anti_patterns)
+    for candidate in workflows:
         tendency = candidate.kind == ChangePatternKind.ADDED_PYTHON_MODULE_ROLE
         builder = build_semantic_tendency_request if tendency else build_semantic_workflow_request
         add(
@@ -521,10 +534,7 @@ def production_inputs(state, facts):
             candidate,
             builder(state.history, facts, state.workflow_candidates, candidate),
         )
-    for candidate in select_semantic_antipattern_candidates(
-        state.antipattern_candidates,
-        limit=ANTIPATTERN_SEMANTIC_LIMIT,
-    ):
+    for candidate in anti_patterns:
         add(
             "anti-pattern",
             candidate,
@@ -607,7 +617,7 @@ def select_decisions(result, ids):
 
 
 def merge_production_knowledge(source, plan, assembly):
-    from skillforge.productization.semantic_assembly import _merge_evidence
+    from skillforge.domain.evidence_merge import merge_evidence as _merge_evidence
 
     results = []
     for channel, name in (
@@ -791,7 +801,7 @@ def validate_production_result(result, source, compiled, plan, old):
 
 def validate_production_decisions(state, knowledge):
     """Keep v1's candidate closure checks on both fresh and persisted v2 decisions."""
-    from skillforge.productization.semantic_assembly import _merge_evidence
+    from skillforge.domain.evidence_merge import merge_evidence as _merge_evidence
     from skillforge.repository.semantic_tendencies import (
         build_semantic_tendency_request,
         validate_semantic_tendency_response,

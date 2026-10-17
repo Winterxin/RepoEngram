@@ -1,6 +1,7 @@
 """Mine workflow candidates from existing change and structural facts."""
 
 import hashlib
+from collections import defaultdict
 from itertools import combinations
 
 from skillforge.domain.change import (
@@ -27,6 +28,58 @@ from skillforge.repository.workflow_code_evidence import WorkflowCodeEvidence
 
 def _values(pattern: ChangePattern) -> tuple[str, ...]:
     return tuple(item.value for item in pattern.items)
+
+
+def _closed_seeds(seeds: list[ChangePattern]) -> list[ChangePattern]:
+    """Preserve the original strict-superset rule without comparing every pair."""
+    groups = defaultdict(list)
+    values = [frozenset(_values(pattern)) for pattern in seeds]
+    for index, pattern in enumerate(seeds):
+        groups[(pattern.kind, pattern.supporting_commits)].append(index)
+    retained = set()
+    for indices in groups.values():
+        sizes = {len(values[index]) for index in indices}
+        if max(sizes, default=0) > 8:
+            # Custom unbounded itemsets must not generate exponentially many subsets.
+            retained.update(index for index in indices if not any(
+                values[index] < values[other] for other in indices
+            ))
+            continue
+        dominated = set()
+        for index in sorted(indices, key=lambda item: -len(values[item])):
+            members = values[index]
+            if members in dominated:
+                continue
+            retained.add(index)
+            for size in sizes:
+                if size < len(members):
+                    dominated.update(frozenset(subset) for subset in
+                                     combinations(sorted(members), size))
+    return [pattern for index, pattern in enumerate(seeds) if index in retained]
+
+
+def _pattern_families(retained, patterns):
+    """Index subset families, retaining duplicates and original stable ID order."""
+    index = defaultdict(list)
+    by_kind = defaultdict(list)
+    for position, pattern in enumerate(patterns):
+        members = frozenset(_values(pattern))
+        index[(pattern.kind, members)].append((position, pattern))
+        by_kind[pattern.kind].append((position, pattern, members))
+    families = []
+    for seed in retained:
+        members = frozenset(_values(seed))
+        if len(members) > 8:
+            matches = [(position, pattern) for position, pattern, values in
+                       by_kind[seed.kind] if values <= members]
+        else:
+            matches = [entry for size in range(len(members) + 1)
+                       for subset in combinations(sorted(members), size)
+                       for entry in index.get((seed.kind, frozenset(subset)), ())]
+        family = tuple(pattern for _, pattern in sorted(
+            matches, key=lambda item: (item[1].pattern_id, item[0])))
+        families.append((seed, family))
+    return families
 
 
 def _signal_key(signal: NoiseSignal) -> tuple[str, str, str, tuple[str, ...]]:
@@ -72,25 +125,8 @@ class WorkflowCandidateMiner:
             elif len(pattern.items) >= 3:
                 seeds.append(pattern)
 
-        retained = [
-            pattern for pattern in seeds
-            if not any(
-                pattern.kind == larger.kind
-                and set(_values(pattern)) < set(_values(larger))
-                and pattern.supporting_commits == larger.supporting_commits
-                for larger in seeds
-            )
-        ]
-
-        families: list[tuple[ChangePattern, tuple[ChangePattern, ...]]] = []
-        for seed in retained:
-            seed_items = set(_values(seed))
-            family = tuple(sorted(
-                (pattern for pattern in change_patterns.patterns
-                 if pattern.kind == seed.kind and set(_values(pattern)) <= seed_items),
-                key=lambda pattern: pattern.pattern_id,
-            ))
-            families.append((seed, family))
+        retained = _closed_seeds(seeds)
+        families = _pattern_families(retained, change_patterns.patterns)
         referenced_patterns = {
             pattern.pattern_id: pattern
             for _, family in families for pattern in family

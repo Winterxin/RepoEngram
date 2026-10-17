@@ -374,6 +374,7 @@ def automatic_prepare(
             config={
                 "history_limit": HISTORY_LIMIT,
                 "workflow_limit": WORKFLOW_SEMANTIC_LIMIT,
+                "selection_current_module": request.selection_module,
                 "anti_pattern_limit": ANTIPATTERN_SEMANTIC_LIMIT,
             },
         ).prepare(request)

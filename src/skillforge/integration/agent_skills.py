@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from skillforge.domain.agent_integration import (
     SCHEMA,
@@ -15,9 +16,23 @@ from skillforge.domain.agent_integration import (
     skill_name,
 )
 from skillforge.domain.evidence import Evidence
+from skillforge.domain.project_dna import ProjectScope
 from skillforge.domain.routing import SkillRouteResult
 from skillforge.domain.serialization import to_json_value
 from skillforge.domain.skills import ProjectSkill, RuleGuidanceSkill
+from skillforge.integration.knowledge_trace import KnowledgeTrace, trace_operation
+from skillforge.integration.skill_instructions import render_executable, render_instruction_audit
+from skillforge.integration.source_conditions import source_conditions
+from skillforge.integration.source_constraints import (
+    SourceConstraintExportPlan,
+    plan_current_source_fallback,
+)
+from skillforge.integration.source_reads import SourceReadSession
+from skillforge.integration.source_representations import source_representations
+from skillforge.integration.source_rule_distillation import (
+    ModelProtocol,
+    plan_current_source_rules,
+)
 
 
 def _scalar(value: str) -> str:
@@ -36,6 +51,22 @@ def _scope(scope: object) -> str:
     return f"{scope.kind.value}: {selectors}"
 
 
+def _portable_description(trigger: object) -> str:
+    description = f"{trigger.task_description} (scope: {_scope(trigger.scope)})"
+    if len(description) > 1024 and len(trigger.scope.selectors) > 1:
+        # Frontmatter is a discovery summary. The body retains every selector.
+        scope = (
+            f"{trigger.scope.kind.value}: {len(trigger.scope.selectors)} selectors; "
+            "see full scope below"
+        )
+        description = f"{trigger.task_description} (scope: {scope})"
+    if len(description) > 1024:
+        raise ValueError(
+            "portable Agent Skill description exceeds specification limit (1024 chars)"
+        )
+    return description
+
+
 def _exception(item: object, indent: str = "") -> str:
     evidence = ", ".join(item.evidence_ids) or "none"
     return f"{indent}- Exception: {item.description} (Evidence: {evidence})"
@@ -50,11 +81,7 @@ def _render_skill(skill: ProjectSkill, name: str) -> str:
     if skill.procedure is not None:
         return _render_executable(skill, name)
     scope = _scope(skill.trigger.scope)
-    description = f"{skill.trigger.task_description} (scope: {scope})"
-    if len(description) > 1024:
-        raise ValueError(
-            "portable Agent Skill description exceeds specification limit (1024 chars)"
-        )
+    description = _portable_description(skill.trigger)
     if not description:
         raise ValueError("portable Agent Skill description must be nonempty")
     lines = ["---", f"name: {_scalar(name)}", f"description: {_scalar(description)}",
@@ -115,11 +142,7 @@ def _render_guidance(skill: RuleGuidanceSkill, name: str) -> str:
     if skill.procedure is not None:
         return _render_executable(skill, name)
     scope = _scope(skill.source_scope)
-    description = f"{skill.trigger.task_description} (scope: {scope})"
-    if len(description) > 1024:
-        raise ValueError(
-            "portable Agent Skill description exceeds specification limit (1024 chars)"
-        )
+    description = _portable_description(skill.trigger)
     lines = [
         "---", f"name: {_scalar(name)}", f"description: {_scalar(description)}",
         "---", "", f"# {skill.description}", "",
@@ -136,163 +159,8 @@ def _render_guidance(skill: RuleGuidanceSkill, name: str) -> str:
     return "\n".join(lines)
 
 
-def _execution_contract() -> list[str]:
-    return [
-        "# Execution contract v1", "",
-        "MATCH SKILL -> RESOLVE APPLICABILITY -> BUILD APPLICABLE OBLIGATIONS -> EXECUTE "
-        "-> CHECK DONE CONDITIONS -> FINAL COMPLETION REVIEW -> ONLY THEN FINISH.", "",
-        "First determine whether this workflow and each step apply to the current user task. "
-        "Record the applicability decisions using current-repository evidence before execution. "
-        "Routing alone does not make every step applicable; unrelated knowledge must not expand "
-        "user intent or require an unrelated new feature.",
-        "Build an execution plan of applicable REQUIRED steps and CONDITIONAL steps whose "
-        "conditions hold. Each is a completion obligation until DONE, "
-        "NOT_APPLICABLE_WITH_EVIDENCE, or BLOCKED. OPTIONAL steps do not block completion.",
-        "Resolve applicability for each returned Skill; prefer the most specific applicable "
-        "project knowledge. Equivalent obligations from multiple Skills are one obligation, "
-        "not duplicated work; duplicated copies do not weaken a REQUIRED obligation.", "",
-        "Resolve source conditions and exceptions before applying an action. A limited "
-        "rule does not authorize changing behavior outside its supported boundary; preserve "
-        "independently valid behavior. Check the final result through the actual integration "
-        "path, not only a helper or an intermediate state. For requested behavior-preservation "
-        "changes, exercise already-valid inputs at every user-named entry point. Keep original "
-        "regression expectations unless the user authorizes changing that behavior; test new "
-        "requirements separately. For distinct generation paths, use independent test outputs "
-        "and confirm the intended path ran; copying fallback output does not test "
-        "fresh generation.",
-        "Shared step completion criteria: fulfill the stated ACTION for the current task; "
-        "the change exists and its intended integration point uses it where applicable. "
-        "Address declared verification obligations and the Testing completion semantics below.",
-        "Shared skip criteria: concrete current-repository evidence shows non-applicability; "
-        "record NOT_APPLICABLE_WITH_EVIDENCE. Passing tests, small patches, scope pointing "
-        "elsewhere, or preferring less work alone are not sufficient reasons.", "",
-        "Matched scope identifies applicability and context. It does not restrict the files "
-        "that may be changed. MATCHED SCOPE / CURRENT SCOPE, including current_file and "
-        "current_module, are not an edit boundary or file permission boundary. If an applicable "
-        "REQUIRED workflow step requires changes outside the matched scope, perform those "
-        "changes. Only an explicit user restriction establishes an edit boundary; if that "
-        "prevents an obligation, record BLOCKED.", "",
-        "Testing completion: when an evidence-backed action requires adding or updating tests, "
-        "DONE requires added or updated tests covering the current new behavior, with their "
-        "paths and coverage recorded. Only running existing tests, only calling Verify, or "
-        "only reporting that tests were not run does not satisfy that action. Apply this "
-        "meaning only when the source action requires test changes; do not infer new project "
-        "testing obligations from a generic verification step.", "",
-    ]
-
-
-def _completion_gate() -> list[str]:
-    return ["", "# COMPLETION GATE", "", "Before considering the task complete:",
-            "1. Review ALL applicable REQUIRED steps, not only steps already executed, "
-            "including declared verification obligations. Check the final diff against them.",
-            "2. Record every REQUIRED step ID and status: DONE, "
-            "NOT_APPLICABLE_WITH_EVIDENCE, or BLOCKED, with completion evidence or the "
-            "concrete current-repository reason for non-applicability.",
-            "3. Resolve every CONDITIONAL step: APPLIES or NOT_APPLICABLE, with reasons. "
-            "For APPLIES, resolve its completion obligation with the same statuses.",
-            "4. OPTIONAL steps do not block completion. A REQUIRED step may not disappear "
-            "silently; reporting that a step was not completed does not make the task complete.",
-            "5. If any applicable REQUIRED or applicable CONDITIONAL obligation is unresolved "
-            "or BLOCKED, task status remains INCOMPLETE / BLOCKED. Report it honestly and "
-            "do not finish normally as a completed task.",
-            "6. Only after all applicable obligations are resolved as DONE or "
-            "NOT_APPLICABLE_WITH_EVIDENCE may the Agent finish normally."]
-
-
 def _render_executable(skill: ProjectSkill | RuleGuidanceSkill, name: str) -> str:
-    procedure = skill.procedure
-    scope = _scope(skill.trigger.scope)
-    description = f"{skill.trigger.task_description} (scope: {scope})"
-    if len(description) > 1024:
-        raise ValueError(
-            "portable Agent Skill description exceeds specification limit (1024 chars)"
-        )
-    lines = ["---", f"name: {_scalar(name)}", f"description: {_scalar(description)}", "---",
-             "", "# Purpose", "", f"Apply an Evidence-backed method for: {skill.description}",
-             "", "# When this applies", "", f"- Scope: {scope}",
-             "- Use when the requested change falls within this scope "
-             "and matches the source intent.",
-             "- Inspect current ownership and source exceptions before choosing a placement.",
-             ""]
-    workflow = isinstance(skill, ProjectSkill)
-    if workflow:
-        # Keep applicability before actions, but put project-specific actions
-        # ahead of the shared contract in bounded first reads.
-        lines += [_execution_contract()[4], ""]
-    lines += ["# Decision procedure / Steps", ""]
-    for index, step in enumerate(procedure.steps, 1):
-        heading = step.step_id if workflow else step.instruction
-        lines += [f"{index}. [{step.kind.value.upper()}] {heading}"]
-        if workflow:
-            lines += [f"   - Step ID: {step.step_id}",
-                      f"   - TYPE: {step.kind.value.upper()}",
-                      f"   - ACTION: {step.instruction}",
-                      "   - DONE WHEN: This ACTION meets the shared step completion criteria."]
-            if step.kind.value == "optional":
-                skip = "Optional; may be omitted and does not become a completion blocker."
-            else:
-                skip = "The shared skip criteria establish non-applicability for this ACTION."
-            lines += [f"   - SKIP ONLY IF: {skip}", f"   - WHY: {step.reason}"]
-        if step.condition:
-            lines.append(f"   - Condition: {step.condition}")
-        if not workflow:
-            lines.append(f"   - Reason: {step.reason}")
-        lines.append(f"   - Evidence: {', '.join(step.evidence_ids) or 'generic reasoning step'}")
-    lines += ["", "# Project constraints", ""]
-    if not procedure.constraints:
-        lines.append("No additional Evidence-backed project constraints were supplied.")
-    for item in procedure.constraints:
-        lines += [f"- [{item.enforcement.value.upper()}] {item.rule_id}: {item.statement}",
-                  f"  - Scope: {_scope(item.scope)}; source status: {item.source_status.value}",
-                  f"  - Support: {_metric(item.source_support)}; "
-                  f"Confidence: {_metric(item.source_confidence)}",
-                  f"  - Evidence: {', '.join(item.evidence_ids)}"]
-        lines += [_exception(exc, "  ") for exc in item.exceptions]
-    if workflow:
-        contract = _execution_contract()
-        lines += ["", *contract[:4], *contract[5:]]
-    lines += ["", "# Verify", ""]
-    for index, item in enumerate(procedure.verify, 1):
-        instruction = item.instruction
-        if workflow and item.step_id == "verify-placement":
-            instruction = instruction.replace("each executed step", "ALL applicable REQUIRED steps")
-        lines.append(f"{index}. {instruction}")
-        if item.condition:
-            lines.append(f"   - Condition: {item.condition}")
-        refs = ', '.join(item.evidence_ids) or 'generic verification step'
-        lines.append(f"   - Evidence: {refs}")
-    lines += ["", "# Evidence", "", "See [references/evidence.md](references/evidence.md).",
-              f"Referenced Evidence IDs: {', '.join(skill.evidence_ids)}",
-              "", "# Confidence / boundaries", "",
-              f"- Source status: {skill.source_status.value}",
-              f"- Source Support: {_metric(skill.source_support)}",
-              f"- Source Confidence: {_metric(skill.source_confidence)}",
-              "- Historical tendencies are conditional preferences, "
-              "never unconditional MUST rules.",
-              "- Candidate or low-confidence knowledge requires checking current applicability; "
-              "it does not become a confirmed project policy.",
-              "- Existing ownership, stronger constraints, contrary current evidence, "
-              "and documented "
-              "exceptions may justify a different choice. Record that reasoning.",
-              "- No future filename, command, or unobserved project convention is prescribed."]
-    if isinstance(skill, RuleGuidanceSkill):
-        lines += [f"- Source authority: {skill.constraint.enforcement.value}; "
-                  "execute the conditional decision procedure without promoting the observation.",
-                  f"- Source rule: {skill.source_rule_id}",
-                  f"- Semantic method: {skill.semantic_method}",
-                  f"- Semantic rationale: {skill.semantic_reason}"]
-        lines += [_exception(item) for item in skill.constraint.exceptions]
-    else:
-        lines += _exceptions(skill.exceptions)
-        for item in skill.risks:
-            lines += [f"- Risk ({item.source_status.value}): {item.name}: {item.avoid_behavior} "
-                      f"(Evidence: {', '.join(item.evidence_ids)})", *_exceptions(item.exceptions)]
-    if procedure.excluded_rule_ids:
-        lines.append("- Conflicted knowledge excluded from instructions: "
-                     + ", ".join(procedure.excluded_rule_ids))
-    if workflow:
-        lines += _completion_gate()
-    return "\n".join([*lines, ""])
+    return render_executable(skill, name, _portable_description(skill.trigger))
 
 
 def _render_evidence(evidence: tuple[Evidence, ...]) -> str:
@@ -317,53 +185,147 @@ def _render_evidence(evidence: tuple[Evidence, ...]) -> str:
 class AgentSkillExporter:
     """The sole knowledge input is a validated SkillRouteResult."""
 
-    def plan(self, route: SkillRouteResult, target: CodeAgentTarget) -> AgentSkillExportPlan:
+    def plan(self, route: SkillRouteResult, target: CodeAgentTarget, *,
+             repository_root: Path | None = None,
+             trace: KnowledgeTrace | None = None) -> AgentSkillExportPlan:
         if not isinstance(route, SkillRouteResult) or not isinstance(target, CodeAgentTarget):
             raise ValueError("a SkillRouteResult and supported target are required")
+        with trace_operation(repository_root, trace, route.repository_id, "export") as trace:
+            reads = SourceReadSession(repository_root) if repository_root is not None else None
+            packages = tuple(sorted(
+                (self._package(route, target, match.skill, reads, trace)
+                 for match in route.matches),
+                key=lambda item: item.agent_skill_name,
+            ))
+            result = AgentSkillExportPlan(
+                route.repository_id, route.registry_id, route.source_snapshot_id, target, packages,
+                plan_fingerprint(route.repository_id, route.registry_id,
+                                 route.source_snapshot_id, target, packages),
+            )
+            trace.finish("export", "EXPORTED" if packages else "NO_ROUTED_KNOWLEDGE",
+                         object_id=result.plan_id,
+                         output_bytes=sum(len(f.content.encode("utf-8"))
+                                          for p in packages for f in p.files))
+            return result
+
+    def package(self, route: SkillRouteResult, target: CodeAgentTarget, skill_id: str, *,
+                repository_root: Path | None = None,
+                trace: KnowledgeTrace | None = None) -> AgentSkillPackage:
+        """Render one already-routed Skill without rendering its siblings."""
+        if not isinstance(route, SkillRouteResult) or not isinstance(target, CodeAgentTarget):
+            raise ValueError("a SkillRouteResult and supported target are required")
+        skill = next((match.skill for match in route.matches
+                      if match.skill.skill_id == skill_id), None)
+        if skill is None:
+            raise ValueError("Skill not selected for this repository task")
+        with trace_operation(repository_root, trace, route.repository_id, "export_one") as trace:
+            reads = SourceReadSession(repository_root) if repository_root is not None else None
+            package = self._package(route, target, skill, reads, trace)
+            trace.finish("export_one", "EXPORTED", object_id=skill_id,
+                         output_bytes=sum(len(f.content.encode("utf-8")) for f in package.files))
+            return package
+
+    def _package(self, route, target, skill, reads, trace=None) -> AgentSkillPackage:
         evidence = {item.evidence_id: item for item in route.evidence}
-        packages = []
-        for match in route.matches:
-            skill = match.skill
-            selected = tuple(evidence[key] for key in skill.evidence_ids if key in evidence)
-            if (tuple(item.evidence_id for item in selected) != skill.evidence_ids
-                    or any(item.repository_id != route.repository_id for item in selected)):
-                raise ValueError("package Evidence must exactly close source Skill references")
-            name = skill_name(skill.skill_id)
-            contents = {"SKILL.md": (_render_guidance(skill, name)
-                                     if isinstance(skill, RuleGuidanceSkill)
-                                     else _render_skill(skill, name)),
-                        "references/evidence.md": _render_evidence(selected)}
-            if isinstance(skill, RuleGuidanceSkill):
-                contents["references/evidence.md"] += (
-                    "## Semantic acceptance audit\n\n"
-                    f"- Candidate: {skill.semantic_candidate_id}\n"
-                    f"- Method: {skill.semantic_method}\n"
-                    f"- Decision Evidence: {', '.join(skill.semantic_evidence_ids)}\n"
-                    f"- Reason: {skill.semantic_reason}\n"
-                )
-            marker = {
-                "schema": SCHEMA, "target": target.value,
-                "repository_id": route.repository_id, "registry_id": route.registry_id,
-                "source_snapshot_id": route.source_snapshot_id,
-                "source_skill_id": skill.skill_id,
-                "source_skill_version": skill.version,
-                "agent_skill_name": name,
-                "evidence_ids": list(skill.evidence_ids),
-                "file_hashes": {key: digest(value) for key, value in contents.items()},
-            }
-            if isinstance(skill, RuleGuidanceSkill):
-                marker["source_kind"] = "RULE"
-                marker["source_rule_id"] = skill.source_rule_id
-            contents[".skillforge.json"] = json.dumps(marker, ensure_ascii=False,
-                                                         sort_keys=True, indent=2) + "\n"
-            files = tuple(AgentSkillFile(key, value, digest(value))
-                          for key, value in sorted(contents.items()))
-            packages.append(AgentSkillPackage(name, skill.skill_id, skill.version, target,
-                                               route.repository_id, route.registry_id,
-                                               route.source_snapshot_id, skill.evidence_ids,
-                                               files, skill))
-        packages = tuple(sorted(packages, key=lambda item: item.agent_skill_name))
-        return AgentSkillExportPlan(route.repository_id, route.registry_id,
-                                    route.source_snapshot_id, target, packages,
-                                    plan_fingerprint(route.repository_id, route.registry_id,
-                                                     route.source_snapshot_id, target, packages))
+        selected = tuple(evidence[key] for key in skill.evidence_ids if key in evidence)
+        if (tuple(item.evidence_id for item in selected) != skill.evidence_ids
+                or any(item.repository_id != route.repository_id for item in selected)):
+            raise ValueError("package Evidence must exactly close source Skill references")
+        name = skill_name(skill.skill_id)
+        if trace is not None:
+            trace.record("selection", "ROUTED_SKILL", object_id=skill.skill_id,
+                         evidence_ids=skill.evidence_ids)
+        contents = {"SKILL.md": (_render_guidance(skill, name)
+                                 if isinstance(skill, RuleGuidanceSkill)
+                                 else _render_skill(skill, name)),
+                    "references/evidence.md": _render_evidence(selected)}
+        if skill.procedure is not None:
+            contents["references/evidence.md"] += render_instruction_audit(skill)
+        if reads is not None:
+            contents["references/evidence.md"] = source_representations(
+                reads.root, skill.trigger.scope, reads=reads,
+            ) + source_conditions(
+                reads.root, skill.trigger.scope, reads=reads,
+            ) + contents["references/evidence.md"]
+        if isinstance(skill, RuleGuidanceSkill):
+            contents["references/evidence.md"] += (
+                "## Semantic acceptance audit\n\n"
+                f"- Candidate: {skill.semantic_candidate_id}\n"
+                f"- Method: {skill.semantic_method}\n"
+                f"- Decision Evidence: {', '.join(skill.semantic_evidence_ids)}\n"
+                f"- Reason: {skill.semantic_reason}\n"
+            )
+        marker = {
+            "schema": SCHEMA, "target": target.value,
+            "repository_id": route.repository_id, "registry_id": route.registry_id,
+            "source_snapshot_id": route.source_snapshot_id,
+            "source_skill_id": skill.skill_id,
+            "source_skill_version": skill.version,
+            "agent_skill_name": name,
+            "evidence_ids": list(skill.evidence_ids),
+            "file_hashes": {key: digest(value) for key, value in contents.items()},
+        }
+        if isinstance(skill, RuleGuidanceSkill):
+            marker["source_kind"] = "RULE"
+            marker["source_rule_id"] = skill.source_rule_id
+        contents[".skillforge.json"] = json.dumps(marker, ensure_ascii=False,
+                                                     sort_keys=True, indent=2) + "\n"
+        files = tuple(AgentSkillFile(key, value, digest(value))
+                      for key, value in sorted(contents.items()))
+        if trace is not None:
+            for file in files:
+                trace.record("render", "FILE_READY", object_id=file.content_sha256,
+                             path=file.relative_path,
+                             output_bytes=len(file.content.encode("utf-8")))
+        return AgentSkillPackage(name, skill.skill_id, skill.version, target,
+                                           route.repository_id, route.registry_id,
+                                           route.source_snapshot_id, skill.evidence_ids,
+                                           files, skill)
+
+    def current_source_fallback(
+        self, route: SkillRouteResult, target: CodeAgentTarget, *,
+        repository_root: Path, scope: ProjectScope, enabled: bool = False,
+        trace: KnowledgeTrace | None = None,
+    ) -> SourceConstraintExportPlan | None:
+        """Opt-in, separate advisory export of explicitly scoped current source."""
+        if enabled is not True:
+            if trace is not None:
+                trace.record("source_fallback", "DISABLED")
+            return None
+        if route.matches:
+            if trace is not None:
+                trace.record("source_fallback", "HISTORICAL_ROUTE_AVAILABLE")
+            return None
+        with trace_operation(repository_root, trace, route.repository_id,
+                             "source_fallback") as trace:
+            result = plan_current_source_fallback(
+                route, target, repository_root=repository_root, scope=scope, trace=trace,
+            )
+            trace.finish("source_fallback", "EXPORTED" if result else "NO_PACKAGE",
+                         object_id=result.plan_id if result else None,
+                         output_bytes=sum(len(f.content.encode("utf-8"))
+                                          for f in result.files) if result else 0)
+            return result
+
+    def current_source_rules(
+        self, route: SkillRouteResult, target: CodeAgentTarget, *,
+        repository_root: Path, scope: ProjectScope, enabled: bool = False,
+        model: ModelProtocol | None = None,
+        trace: KnowledgeTrace | None = None,
+        task_aware_selection: bool = False,
+    ) -> SourceConstraintExportPlan | None:
+        """Opt-in, separate advisory distillation of explicitly scoped current source."""
+        if enabled is not True or route.matches:
+            return None
+        with trace_operation(repository_root, trace, route.repository_id, "source_rules") as trace:
+            trace.record("source_rules", "DISTILLATION_STARTED")
+            trace.persist(repository_root)
+            result = plan_current_source_rules(
+                route, target, repository_root=repository_root, scope=scope,
+                model=model, trace=trace, task_aware_selection=task_aware_selection,
+            )
+            trace.finish("source_rules", "EXPORTED" if result else "NO_SOURCE_PACKAGE",
+                         object_id=result.plan_id if result else None,
+                         output_bytes=sum(len(f.content.encode("utf-8"))
+                                          for f in result.files) if result else 0)
+            return result

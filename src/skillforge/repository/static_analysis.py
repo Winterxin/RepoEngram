@@ -316,7 +316,7 @@ class PythonStaticAnalyzer:
                           ast.unparse(node.returns))
             body_id = self._record_evidence(
                 repository_id, module_file.path, line, column,
-                f"body:{qualified_name}:{ast.dump(node)}" + literal_body,
+                f"body:{qualified_name}:{line}:{column}:{ast.dump(node)}" + literal_body,
                 f"Python implementation {qualified_name}: {ast.unparse(node)}" + literal_body,
                 evidence_by_id,
             )

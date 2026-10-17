@@ -8,6 +8,7 @@ from pathlib import Path
 
 from skillforge.domain.evidence import EvidenceType
 from skillforge.filesystem_safety import no_symlink
+from skillforge.integration.context_selection import output_record_rank
 from skillforge.repository.workflow_code_evidence import (
     MAX_CODE_CONTEXT_BYTES,
     MAX_HELPER_DEPTH,
@@ -297,7 +298,7 @@ def _output_flow(node, max_bytes=MAX_FLOW_BYTES, *, field_reads=None):
     # Reallocate the same flow slice, retaining generation/merge/return anchors
     # ahead of intermediate paths. Whole literal-key groups take precedence.
     reserve = min(192, max_bytes // 4) if mapping_observations else 0
-    for _, row in sorted(entries, key=lambda pair: (pair[0], pair[1]['line'])):
+    for _, row in sorted(entries, key=output_record_rank):
         candidate = sorted([*selected, row], key=lambda value: value['line'])
         candidate_size = _size({'output_flow': candidate, 'omitted_flow_records': len(entries)})
         if candidate_size <= max_bytes - reserve:
@@ -334,11 +335,11 @@ def _mapping_flow(flow, max_bytes):
     """Keep complete field locators without duplicating the helper's call list."""
     selected = []
     total = len(flow['output_flow']) + flow['omitted_flow_records']
-    for record in flow['output_flow']:
+    for record in sorted(flow['output_flow'], key=lambda row: output_record_rank((1, row))):
         if not record.get('write_fields'):
             continue
         row = {key: record[key] for key in ('line', 'when', 'write_fields') if key in record}
-        candidate = [*selected, row]
+        candidate = sorted([*selected, row], key=lambda item: item['line'])
         if _size({'output_flow': candidate, 'omitted_flow_records': total}) <= max_bytes:
             selected = candidate
     return {'output_flow': selected, 'omitted_flow_records': total - len(selected)}

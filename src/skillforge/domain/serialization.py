@@ -11,7 +11,10 @@ def to_json_value(value: Any) -> Any:
         return {
             field.name: to_json_value(getattr(value, field.name))
             for field in fields(value)
-            if not (field.metadata.get("omit_empty") and getattr(value, field.name) == "")
+            if not (
+                (field.metadata.get("omit_empty") and getattr(value, field.name) == "")
+                or (field.metadata.get("omit_none") and getattr(value, field.name) is None)
+            )
         }
     if isinstance(value, Enum):
         return value.value

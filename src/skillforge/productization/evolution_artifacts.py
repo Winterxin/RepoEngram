@@ -118,7 +118,8 @@ def _restore(kind: Any, value: Any, *, _schemas=None) -> Any:
         omittable_defaults = {
             item.name
             for item in definitions
-            if item.metadata.get("omit_empty") and item.default is not MISSING
+            if (item.metadata.get("omit_empty") or item.metadata.get("omit_none"))
+            and item.default is not MISSING
         }
         if actual - expected or (expected - actual) - omittable_defaults:
             raise ValueError("invalid evolution object fields")

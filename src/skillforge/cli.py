@@ -104,6 +104,9 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--task", required=True, help="task for Skill routing")
     prepare.add_argument("--target", required=True, choices=("codex", "claude_code"))
     prepare.add_argument("--current-module", help="exact current Python module for routing")
+    prepare.add_argument(
+        "--selection-module", help="optional Python module scope for knowledge extraction",
+    )
     prepare.add_argument("--baseline", type=Path, help="Evolution baseline for the next task")
     prepare.add_argument("--rebuild", action="store_true",
                          help="explicitly rebuild repository knowledge")
@@ -229,6 +232,7 @@ def main(argv: list[str] | None = None) -> int:
             result = automatic_prepare(PrepareRequest(
                 args.path, args.task, CodeAgentTarget(args.target), args.current_module,
                 args.baseline,
+                selection_module=args.selection_module,
             ), preparer=SkillForgePreparer(), rebuild=args.rebuild)
             publication = None
             if (result.target == CodeAgentTarget.CODEX

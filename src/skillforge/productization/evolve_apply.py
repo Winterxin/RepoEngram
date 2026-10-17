@@ -78,6 +78,7 @@ def evolve_apply(
     reconstructed = evolution.make_state(
         loaded.target_state.history, plan.target_head_commit,
         baseline.history_limit, static,
+        current_module=loaded.target_state.current_module,
     )
     if reconstructed != loaded.target_state:
         raise ValueError("Repository static facts changed since evolve-plan; rerun evolve-plan.")

@@ -1,0 +1,414 @@
+{
+  "candidate": {
+    "rule": {
+      "rule_id": "structural-delegation-965c3e7f38813b3a3d56fd9a",
+      "repository_id": "5760d370c9d0632845cf",
+      "type": "architecture",
+      "statement": "Observed REPEATED_OWNER_DELEGATION: public operations apps.api.app.api.routes.analysis.create_task, apps.api.app.api.routes.analysis.download_artifact, apps.api.app.api.routes.analysis.get_analysis_results, apps.api.app.api.routes.analysis.get_task, apps.api.app.api.routes.analysis.upload_csv delegate across modules from apps.api.app.api.routes.analysis to apps.api.app.application.tasks.task_service.TaskService. This observation is bounded to the listed operations; other operations require current Evidence. Not covered: apps.api.app.api.routes.analysis.run_task",
+      "scope": {
+        "kind": "module",
+        "selectors": [
+          "apps.api.app.api.routes.analysis"
+        ]
+      },
+      "status": "candidate",
+      "evidence_ids": [
+        "016cd538c176206cc773719e",
+        "0567f5e398c7d537f5a67b0f",
+        "0d2fd3060e6411653fdc399f",
+        "0fe499f742e7ca692c4bd92d",
+        "11797ff9abc28166d5a7ce49",
+        "177ab0289892b71faa4da01a",
+        "1ba6f6813decc2658c34f4b5",
+        "236b4e9ce9b8f39918d524a0",
+        "2ebab98dab1efde61edde5f5",
+        "4397f9a5150a6b16df72f6ad",
+        "4c904d7df32513002b7c6923",
+        "5179ca9f70baf05aaf3f35d8",
+        "5a836164f2df382f3aea2b4c",
+        "66e9f91989e5b4daf9d27da8",
+        "7382250d3841950f88459c58",
+        "822cc00718b9298631cf532a",
+        "8de0e0df7f8cb66813d19c25",
+        "974bbfe58facf541638d9376",
+        "9ccd033d15458dfe4eef7fd1",
+        "a030a97b2a175ce7f034b547",
+        "a95ad8450a8fde584b0f1166",
+        "ae9a751bcfae3ad9b8cbffe3",
+        "b6145ed26715fb64c29a810d",
+        "bd027b0cad01de46917723fd",
+        "c08dc80de08279392f6c9c60",
+        "c4028c6b991d5d9acc3ca69f",
+        "c8ad98823dcdc0b6915442d1",
+        "cd38524ee21e9a1079754668",
+        "e725d722305589873486e045",
+        "e8c0864e940ad2dd1edc2123",
+        "f3676069214f060c3d009324",
+        "f57e28d622fe16ee0cd81330",
+        "fa60400a01fc6eef9d6b0e85"
+      ],
+      "support": {
+        "supporting": 5,
+        "examined": 6
+      },
+      "confidence": null,
+      "exceptions": []
+    },
+    "source_package": "apps.api.app.api.routes.analysis",
+    "target_package": "apps.api.app.application.tasks.task_service.TaskService",
+    "source_modules": [
+      "apps.api.app.api.routes.analysis"
+    ],
+    "target_modules": [
+      "apps.api.app.application.tasks.task_service"
+    ],
+    "examined_modules": [
+      "apps.api.app.api.routes.analysis",
+      "apps.api.app.application.tasks.task_service"
+    ],
+    "method": "python_ast_static_delegation_v1",
+    "operation_symbols": [
+      "apps.api.app.api.routes.analysis.create_task",
+      "apps.api.app.api.routes.analysis.download_artifact",
+      "apps.api.app.api.routes.analysis.get_analysis_results",
+      "apps.api.app.api.routes.analysis.get_task",
+      "apps.api.app.api.routes.analysis.upload_csv"
+    ],
+    "delegation_topology": [
+      "apps.api.app.api.routes.analysis",
+      "apps.api.app.application.tasks.task_service.TaskService"
+    ],
+    "operation_family": [],
+    "test_linkages": [],
+    "delegation_pattern": "REPEATED_OWNER_DELEGATION",
+    "examined_operation_symbols": [
+      "apps.api.app.api.routes.analysis.create_task",
+      "apps.api.app.api.routes.analysis.download_artifact",
+      "apps.api.app.api.routes.analysis.get_analysis_results",
+      "apps.api.app.api.routes.analysis.get_task",
+      "apps.api.app.api.routes.analysis.run_task",
+      "apps.api.app.api.routes.analysis.upload_csv"
+    ]
+  },
+  "request": {
+    "repository_id": "5760d370c9d0632845cf",
+    "candidate_id": "structural-delegation-965c3e7f38813b3a3d56fd9a",
+    "canonical_observation": "Observed REPEATED_OWNER_DELEGATION: public operations apps.api.app.api.routes.analysis.create_task, apps.api.app.api.routes.analysis.download_artifact, apps.api.app.api.routes.analysis.get_analysis_results, apps.api.app.api.routes.analysis.get_task, apps.api.app.api.routes.analysis.upload_csv delegate across modules from apps.api.app.api.routes.analysis to apps.api.app.application.tasks.task_service.TaskService. This observation is bounded to the listed operations; other operations require current Evidence. Not covered: apps.api.app.api.routes.analysis.run_task",
+    "source_package": "apps.api.app.api.routes.analysis",
+    "target_package": "apps.api.app.application.tasks.task_service.TaskService",
+    "support": {
+      "supporting": 5,
+      "examined": 6
+    },
+    "examined_modules": [
+      "apps.api.app.api.routes.analysis",
+      "apps.api.app.application.tasks.task_service"
+    ],
+    "source_modules": [
+      "apps.api.app.api.routes.analysis"
+    ],
+    "target_modules": [
+      "apps.api.app.application.tasks.task_service"
+    ],
+    "evidence": [
+      {
+        "evidence_id": "016cd538c176206cc773719e",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 88,
+        "description": "Python function apps.api.app.api.routes.analysis.upload_csv",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.upload_csv"
+      },
+      {
+        "evidence_id": "0567f5e398c7d537f5a67b0f",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 64,
+        "description": "Python call apps.api.app.api.routes.analysis.download_artifact -> apps.api.app.application.tasks.task_service.TaskService.resolve_artifact: _task_service(session).resolve_artifact(task_id, artifact_name)",
+        "observed_import_relation": "Python call apps.api.app.api.routes.analysis.download_artifact -> apps.api.app.application.tasks.task_service.TaskService.resolve_artifact: _task_service(session).resolve_artifact(task_id, artifact_name)"
+      },
+      {
+        "evidence_id": "0d2fd3060e6411653fdc399f",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 26,
+        "description": "Python receiver binding: TaskService",
+        "observed_import_relation": "Python receiver binding: TaskService"
+      },
+      {
+        "evidence_id": "0fe499f742e7ca692c4bd92d",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 202,
+        "description": "Python method apps.api.app.application.tasks.task_service.TaskService.upload_csv",
+        "observed_import_relation": "Python method apps.api.app.application.tasks.task_service.TaskService.upload_csv"
+      },
+      {
+        "evidence_id": "11797ff9abc28166d5a7ce49",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 26,
+        "description": "Python function apps.api.app.api.routes.analysis._task_service",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis._task_service"
+      },
+      {
+        "evidence_id": "177ab0289892b71faa4da01a",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 60,
+        "description": "Python implementation apps.api.app.api.routes.analysis.download_artifact: @router.get('/analysis/tasks/{task_id}/artifacts/{artifact_name}')\ndef download_artifact(task_id: str, artifact_name: str, session: Session=Depends(get_session)) -> FileResponse:\n    try:\n        artifact = _task_service(session).resolve_artifact(task_id, artifact_name)\n    except (TaskNotFoundError, ArtifactNotFoundError, ArtifactFileNotFoundError) as exc:\n        _raise_http_error(exc)\n    artifact_path = artifact.path\n    media_type = artifact.media_type\n    content_disposition_type = 'inline' if media_type.startswith('text/html') else 'attachment'\n    return FileResponse(artifact_path, filename=artifact_path.name, media_type=media_type, content_disposition_type=content_disposition_type)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.download_artifact: @router.get('/analysis/tasks/{task_id}/artifacts/{artifact_name}')\ndef download_artifact(task_id: str, artifact_name: str, session: Session=Depends(get_session)) -> FileResponse:\n    try:\n        artifact = _task_service(session).resolve_artifact(task_id, artifact_name)\n    except (TaskNotFoundError, ArtifactNotFoundError, ArtifactFileNotFoundError) as exc:\n        _raise_http_error(exc)\n    artifact_path = artifact.path\n    media_type = artifact.media_type\n    content_disposition_type = 'inline' if media_type.startswith('text/html') else 'attachment'\n    return FileResponse(artifact_path, filename=artifact_path.name, media_type=media_type, content_disposition_type=content_disposition_type)"
+      },
+      {
+        "evidence_id": "1ba6f6813decc2658c34f4b5",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 192,
+        "description": "Python implementation apps.api.app.application.tasks.task_service.TaskService.get_analysis_results: def get_analysis_results(self, task_id: str) -> dict[str, object]:\n    self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    try:\n        return build_analysis_results_payload(task_id, manifest)\n    except FileNotFoundError as exc:\n        raise AnalysisResultsNotAvailableError('Analysis results are not available') from exc",
+        "observed_import_relation": "Python implementation apps.api.app.application.tasks.task_service.TaskService.get_analysis_results: def get_analysis_results(self, task_id: str) -> dict[str, object]:\n    self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    try:\n        return build_analysis_results_payload(task_id, manifest)\n    except FileNotFoundError as exc:\n        raise AnalysisResultsNotAvailableError('Analysis results are not available') from exc"
+      },
+      {
+        "evidence_id": "236b4e9ce9b8f39918d524a0",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 88,
+        "description": "Python implementation apps.api.app.api.routes.analysis.upload_csv: @router.post('/analysis/tasks/{task_id}/upload', response_model=UploadResponse)\ndef upload_csv(task_id: str, file: UploadFile=File(...), session: Session=Depends(get_session)) -> UploadResponse:\n    try:\n        return _task_service(session).upload_csv(task_id, filename=file.filename, content=file.file.read())\n    except (TaskNotFoundError, InvalidUploadError) as exc:\n        _raise_http_error(exc)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.upload_csv: @router.post('/analysis/tasks/{task_id}/upload', response_model=UploadResponse)\ndef upload_csv(task_id: str, file: UploadFile=File(...), session: Session=Depends(get_session)) -> UploadResponse:\n    try:\n        return _task_service(session).upload_csv(task_id, filename=file.filename, content=file.file.read())\n    except (TaskNotFoundError, InvalidUploadError) as exc:\n        _raise_http_error(exc)"
+      },
+      {
+        "evidence_id": "2ebab98dab1efde61edde5f5",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 106,
+        "description": "Python implementation apps.api.app.api.routes.analysis.run_task: @router.post('/analysis/tasks/{task_id}/run', response_model=RunResponse, status_code=status.HTTP_202_ACCEPTED)\ndef run_task(task_id: str, llm_profile: str | None=Query(default=None), output_language: str | None=Query(default=None), session: Session=Depends(get_session)) -> RunResponse:\n    try:\n        _task_service(session).get_task_model(task_id)\n    except TaskNotFoundError as exc:\n        _raise_http_error(exc)\n    return AnalysisRunService(session).run(task_id, llm_profile=llm_profile, output_language=output_language)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.run_task: @router.post('/analysis/tasks/{task_id}/run', response_model=RunResponse, status_code=status.HTTP_202_ACCEPTED)\ndef run_task(task_id: str, llm_profile: str | None=Query(default=None), output_language: str | None=Query(default=None), session: Session=Depends(get_session)) -> RunResponse:\n    try:\n        _task_service(session).get_task_model(task_id)\n    except TaskNotFoundError as exc:\n        _raise_http_error(exc)\n    return AnalysisRunService(session).run(task_id, llm_profile=llm_profile, output_language=output_language)"
+      },
+      {
+        "evidence_id": "4397f9a5150a6b16df72f6ad",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 8,
+        "description": "Python import binding: from app.application.tasks.task_service import AnalysisResultsNotAvailableError, ArtifactFileNotFoundError, ArtifactNotFoundError, InvalidUploadError, TaskNotFoundError, TaskService",
+        "observed_import_relation": "binding: from app.application.tasks.task_service import AnalysisResultsNotAvailableError, ArtifactFileNotFoundError, ArtifactNotFoundError, InvalidUploadError, TaskNotFoundError, TaskService"
+      },
+      {
+        "evidence_id": "4c904d7df32513002b7c6923",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 60,
+        "description": "Python function apps.api.app.api.routes.analysis.download_artifact",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.download_artifact"
+      },
+      {
+        "evidence_id": "5179ca9f70baf05aaf3f35d8",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 192,
+        "description": "Python method apps.api.app.application.tasks.task_service.TaskService.get_analysis_results",
+        "observed_import_relation": "Python method apps.api.app.application.tasks.task_service.TaskService.get_analysis_results"
+      },
+      {
+        "evidence_id": "5a836164f2df382f3aea2b4c",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 179,
+        "description": "Python method apps.api.app.application.tasks.task_service.TaskService.resolve_artifact",
+        "observed_import_relation": "Python method apps.api.app.application.tasks.task_service.TaskService.resolve_artifact"
+      },
+      {
+        "evidence_id": "66e9f91989e5b4daf9d27da8",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 143,
+        "description": "Python method apps.api.app.application.tasks.task_service.TaskService.create_task",
+        "observed_import_relation": "Python method apps.api.app.application.tasks.task_service.TaskService.create_task"
+      },
+      {
+        "evidence_id": "7382250d3841950f88459c58",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 94,
+        "description": "Python call apps.api.app.api.routes.analysis.upload_csv -> apps.api.app.application.tasks.task_service.TaskService.upload_csv: _task_service(session).upload_csv(task_id, filename=file.filename, content=file.file.read())",
+        "observed_import_relation": "Python call apps.api.app.api.routes.analysis.upload_csv -> apps.api.app.application.tasks.task_service.TaskService.upload_csv: _task_service(session).upload_csv(task_id, filename=file.filename, content=file.file.read())"
+      },
+      {
+        "evidence_id": "822cc00718b9298631cf532a",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 47,
+        "description": "Python implementation apps.api.app.api.routes.analysis.create_task: @router.post('/analysis/tasks', response_model=TaskCreateResponse, status_code=201)\ndef create_task(session: Session=Depends(get_session)) -> TaskCreateResponse:\n    return _task_service(session).create_task()",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.create_task: @router.post('/analysis/tasks', response_model=TaskCreateResponse, status_code=201)\ndef create_task(session: Session=Depends(get_session)) -> TaskCreateResponse:\n    return _task_service(session).create_task()"
+      },
+      {
+        "evidence_id": "8de0e0df7f8cb66813d19c25",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 80,
+        "description": "Python implementation apps.api.app.api.routes.analysis.get_analysis_results: @router.get('/analysis/tasks/{task_id}/results')\ndef get_analysis_results(task_id: str, session: Session=Depends(get_session)) -> dict[str, object]:\n    try:\n        return _task_service(session).get_analysis_results(task_id)\n    except (TaskNotFoundError, AnalysisResultsNotAvailableError) as exc:\n        _raise_http_error(exc)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.get_analysis_results: @router.get('/analysis/tasks/{task_id}/results')\ndef get_analysis_results(task_id: str, session: Session=Depends(get_session)) -> dict[str, object]:\n    try:\n        return _task_service(session).get_analysis_results(task_id)\n    except (TaskNotFoundError, AnalysisResultsNotAvailableError) as exc:\n        _raise_http_error(exc)"
+      },
+      {
+        "evidence_id": "974bbfe58facf541638d9376",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 54,
+        "description": "Python call apps.api.app.api.routes.analysis.get_task -> apps.api.app.application.tasks.task_service.TaskService.get_task_detail: _task_service(session).get_task_detail(task_id)",
+        "observed_import_relation": "Python call apps.api.app.api.routes.analysis.get_task -> apps.api.app.application.tasks.task_service.TaskService.get_task_detail: _task_service(session).get_task_detail(task_id)"
+      },
+      {
+        "evidence_id": "9ccd033d15458dfe4eef7fd1",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 48,
+        "description": "Python call apps.api.app.api.routes.analysis.create_task -> apps.api.app.application.tasks.task_service.TaskService.create_task: _task_service(session).create_task()",
+        "observed_import_relation": "Python call apps.api.app.api.routes.analysis.create_task -> apps.api.app.application.tasks.task_service.TaskService.create_task: _task_service(session).create_task()"
+      },
+      {
+        "evidence_id": "a030a97b2a175ce7f034b547",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 143,
+        "description": "Python implementation apps.api.app.application.tasks.task_service.TaskService.create_task: def create_task(self) -> TaskCreateResponse:\n    task = AnalysisTask(status='created')\n    self.session.add(task)\n    self.session.commit()\n    self.session.refresh(task)\n    manifest = {'task_id': task.task_id, 'status': task.status, 'output_language': DEFAULT_OUTPUT_LANGUAGE, 'files': {}}\n    manifest_path = self.store.save_manifest(task.task_id, manifest)\n    task.artifact_manifest_path = str(manifest_path)\n    self.session.add(task)\n    self.session.commit()\n    return TaskCreateResponse(task_id=task.task_id, status=task.status)",
+        "observed_import_relation": "Python implementation apps.api.app.application.tasks.task_service.TaskService.create_task: def create_task(self) -> TaskCreateResponse:\n    task = AnalysisTask(status='created')\n    self.session.add(task)\n    self.session.commit()\n    self.session.refresh(task)\n    manifest = {'task_id': task.task_id, 'status': task.status, 'output_language': DEFAULT_OUTPUT_LANGUAGE, 'files': {}}\n    manifest_path = self.store.save_manifest(task.task_id, manifest)\n    task.artifact_manifest_path = str(manifest_path)\n    self.session.add(task)\n    self.session.commit()\n    return TaskCreateResponse(task_id=task.task_id, status=task.status)"
+      },
+      {
+        "evidence_id": "a95ad8450a8fde584b0f1166",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 202,
+        "description": "Python implementation apps.api.app.application.tasks.task_service.TaskService.upload_csv: def upload_csv(self, task_id: str, filename: str | None, content: bytes) -> UploadResponse:\n    task = self.get_task_model(task_id)\n    if not filename or not filename.lower().endswith('.csv'):\n        raise InvalidUploadError('Only CSV uploads are supported')\n    if not content:\n        raise InvalidUploadError('Uploaded file is empty')\n    llm_client = get_default_llm_client()\n    raw_path = self.store.save_bytes(task_id, 'raw.csv', content)\n    ingestion = ingest_csv(raw_path)\n    schema_mapping, schema_trace = map_schema_with_trace(ingestion.columns, llm_client=llm_client)\n    _normalize_raw_csv_encoding(raw_path)\n    _derive_sales_amount_if_needed(raw_path, schema_mapping)\n    ingestion = ingest_csv(raw_path)\n    profile_frame = _read_csv_for_profile(raw_path)\n    dataset_profile = build_dataset_profile(profile_frame, schema_mapping)\n    analysis_focus = select_analysis_focuses(dataset_profile)\n    analysis_plan = build_analysis_plan(schema_mapping, ingestion)\n    llm_trace = {'schema_mapping': schema_trace.model_dump()}\n    manifest = self.store.load_manifest(task_id)\n    output_language = normalize_output_language(manifest.get('output_language'))\n    llm_trace_path = self.store.save_json(task_id, 'llm_trace.json', _llm_trace_artifact_payload(llm_trace, output_language=output_language))\n    dataset_profile_path = self.store.save_json(task_id, 'dataset_profile.json', dataset_profile)\n    analysis_focus_path = self.store.save_json(task_id, 'analysis_focus.json', analysis_focus)\n    manifest.update({'status': 'uploaded', 'output_language': output_language, 'uploaded_filename': filename, 'artifact_name_stem': _artifact_stem_from_filename(filename), 'ingestion': ingestion.model_dump(), 'schema_mapping': schema_mapping.model_dump(), 'dataset_profile': dataset_profile, 'analysis_focus': analysis_focus, 'analysis_plan': analysis_plan.model_dump(), 'llm_trace': _llm_trace_artifact_payload(llm_trace, output_language=output_language), 'files': {**manifest.get('files', {}), 'llm_trace_json': str(llm_trace_path), 'dataset_profile_json': str(dataset_profile_path), 'analysis_focus_json': str(analysis_focus_path), 'raw_csv': str(raw_path)}})\n    manifest_path = self.store.save_manifest(task_id, manifest)\n    task.status = 'uploaded'\n    task.dataset_type = schema_mapping.dataset_type\n    task.artifact_manifest_path = str(manifest_path)\n    self.session.add(task)\n    self.session.commit()\n    return UploadResponse(task_id=task_id, status='uploaded', ingestion=ingestion, schema_mapping=schema_mapping, analysis_plan=analysis_plan, llm_trace={'schema_mapping': schema_trace})",
+        "observed_import_relation": "Python implementation apps.api.app.application.tasks.task_service.TaskService.upload_csv: def upload_csv(self, task_id: str, filename: str | None, content: bytes) -> UploadResponse:\n    task = self.get_task_model(task_id)\n    if not filename or not filename.lower().endswith('.csv'):\n        raise InvalidUploadError('Only CSV uploads are supported')\n    if not content:\n        raise InvalidUploadError('Uploaded file is empty')\n    llm_client = get_default_llm_client()\n    raw_path = self.store.save_bytes(task_id, 'raw.csv', content)\n    ingestion = ingest_csv(raw_path)\n    schema_mapping, schema_trace = map_schema_with_trace(ingestion.columns, llm_client=llm_client)\n    _normalize_raw_csv_encoding(raw_path)\n    _derive_sales_amount_if_needed(raw_path, schema_mapping)\n    ingestion = ingest_csv(raw_path)\n    profile_frame = _read_csv_for_profile(raw_path)\n    dataset_profile = build_dataset_profile(profile_frame, schema_mapping)\n    analysis_focus = select_analysis_focuses(dataset_profile)\n    analysis_plan = build_analysis_plan(schema_mapping, ingestion)\n    llm_trace = {'schema_mapping': schema_trace.model_dump()}\n    manifest = self.store.load_manifest(task_id)\n    output_language = normalize_output_language(manifest.get('output_language'))\n    llm_trace_path = self.store.save_json(task_id, 'llm_trace.json', _llm_trace_artifact_payload(llm_trace, output_language=output_language))\n    dataset_profile_path = self.store.save_json(task_id, 'dataset_profile.json', dataset_profile)\n    analysis_focus_path = self.store.save_json(task_id, 'analysis_focus.json', analysis_focus)\n    manifest.update({'status': 'uploaded', 'output_language': output_language, 'uploaded_filename': filename, 'artifact_name_stem': _artifact_stem_from_filename(filename), 'ingestion': ingestion.model_dump(), 'schema_mapping': schema_mapping.model_dump(), 'dataset_profile': dataset_profile, 'analysis_focus': analysis_focus, 'analysis_plan': analysis_plan.model_dump(), 'llm_trace': _llm_trace_artifact_payload(llm_trace, output_language=output_language), 'files': {**manifest.get('files', {}), 'llm_trace_json': str(llm_trace_path), 'dataset_profile_json': str(dataset_profile_path), 'analysis_focus_json': str(analysis_focus_path), 'raw_csv': str(raw_path)}})\n    manifest_path = self.store.save_manifest(task_id, manifest)\n    task.status = 'uploaded'\n    task.dataset_type = schema_mapping.dataset_type\n    task.artifact_manifest_path = str(manifest_path)\n    self.session.add(task)\n    self.session.commit()\n    return UploadResponse(task_id=task_id, status='uploaded', ingestion=ingestion, schema_mapping=schema_mapping, analysis_plan=analysis_plan, llm_trace={'schema_mapping': schema_trace})"
+      },
+      {
+        "evidence_id": "ae9a751bcfae3ad9b8cbffe3",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 52,
+        "description": "Python implementation apps.api.app.api.routes.analysis.get_task: @router.get('/analysis/tasks/{task_id}', response_model=TaskDetailResponse)\ndef get_task(task_id: str, session: Session=Depends(get_session)) -> TaskDetailResponse:\n    try:\n        return _task_service(session).get_task_detail(task_id)\n    except TaskNotFoundError as exc:\n        _raise_http_error(exc)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis.get_task: @router.get('/analysis/tasks/{task_id}', response_model=TaskDetailResponse)\ndef get_task(task_id: str, session: Session=Depends(get_session)) -> TaskDetailResponse:\n    try:\n        return _task_service(session).get_task_detail(task_id)\n    except TaskNotFoundError as exc:\n        _raise_http_error(exc)"
+      },
+      {
+        "evidence_id": "b6145ed26715fb64c29a810d",
+        "path": "apps/api/app/__init__.py",
+        "line": null,
+        "description": "Python module file for apps.api.app",
+        "observed_import_relation": "Python module file for apps.api.app"
+      },
+      {
+        "evidence_id": "bd027b0cad01de46917723fd",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 52,
+        "description": "Python function apps.api.app.api.routes.analysis.get_task",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.get_task"
+      },
+      {
+        "evidence_id": "c08dc80de08279392f6c9c60",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 26,
+        "description": "Python implementation apps.api.app.api.routes.analysis._task_service: def _task_service(session: Session) -> TaskService:\n    return TaskService(session)",
+        "observed_import_relation": "Python implementation apps.api.app.api.routes.analysis._task_service: def _task_service(session: Session) -> TaskService:\n    return TaskService(session)"
+      },
+      {
+        "evidence_id": "c4028c6b991d5d9acc3ca69f",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 179,
+        "description": "Python implementation apps.api.app.application.tasks.task_service.TaskService.resolve_artifact: def resolve_artifact(self, task_id: str, artifact_name: str) -> ArtifactDownload:\n    self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    try:\n        manifest_key, media_type = ARTIFACT_ROUTE_MAP[artifact_name]\n        artifact_path = Path(str(manifest['files'][manifest_key]))\n    except KeyError as exc:\n        raise ArtifactNotFoundError('Artifact not found') from exc\n    if not artifact_path.exists():\n        raise ArtifactFileNotFoundError('Artifact file not found')\n    return ArtifactDownload(path=artifact_path, media_type=media_type)",
+        "observed_import_relation": "Python implementation apps.api.app.application.tasks.task_service.TaskService.resolve_artifact: def resolve_artifact(self, task_id: str, artifact_name: str) -> ArtifactDownload:\n    self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    try:\n        manifest_key, media_type = ARTIFACT_ROUTE_MAP[artifact_name]\n        artifact_path = Path(str(manifest['files'][manifest_key]))\n    except KeyError as exc:\n        raise ArtifactNotFoundError('Artifact not found') from exc\n    if not artifact_path.exists():\n        raise ArtifactFileNotFoundError('Artifact file not found')\n    return ArtifactDownload(path=artifact_path, media_type=media_type)"
+      },
+      {
+        "evidence_id": "c8ad98823dcdc0b6915442d1",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 82,
+        "description": "Python call apps.api.app.api.routes.analysis.get_analysis_results -> apps.api.app.application.tasks.task_service.TaskService.get_analysis_results: _task_service(session).get_analysis_results(task_id)",
+        "observed_import_relation": "Python call apps.api.app.api.routes.analysis.get_analysis_results -> apps.api.app.application.tasks.task_service.TaskService.get_analysis_results: _task_service(session).get_analysis_results(task_id)"
+      },
+      {
+        "evidence_id": "cd38524ee21e9a1079754668",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 106,
+        "description": "Python function apps.api.app.api.routes.analysis.run_task",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.run_task"
+      },
+      {
+        "evidence_id": "e725d722305589873486e045",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 47,
+        "description": "Python function apps.api.app.api.routes.analysis.create_task",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.create_task"
+      },
+      {
+        "evidence_id": "e8c0864e940ad2dd1edc2123",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 168,
+        "description": "Python implementation apps.api.app.application.tasks.task_service.TaskService.get_task_detail: def get_task_detail(self, task_id: str) -> TaskDetailResponse:\n    task = self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    return TaskDetailResponse(task_id=task.task_id, status=task.status, dataset_type=task.dataset_type, artifact_manifest=manifest, error_message=task.error_message)",
+        "observed_import_relation": "Python implementation apps.api.app.application.tasks.task_service.TaskService.get_task_detail: def get_task_detail(self, task_id: str) -> TaskDetailResponse:\n    task = self.get_task_model(task_id)\n    manifest = self.store.load_manifest(task_id)\n    return TaskDetailResponse(task_id=task.task_id, status=task.status, dataset_type=task.dataset_type, artifact_manifest=manifest, error_message=task.error_message)"
+      },
+      {
+        "evidence_id": "f3676069214f060c3d009324",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 168,
+        "description": "Python method apps.api.app.application.tasks.task_service.TaskService.get_task_detail",
+        "observed_import_relation": "Python method apps.api.app.application.tasks.task_service.TaskService.get_task_detail"
+      },
+      {
+        "evidence_id": "f57e28d622fe16ee0cd81330",
+        "path": "apps/api/app/api/routes/analysis.py",
+        "line": 80,
+        "description": "Python function apps.api.app.api.routes.analysis.get_analysis_results",
+        "observed_import_relation": "Python function apps.api.app.api.routes.analysis.get_analysis_results"
+      },
+      {
+        "evidence_id": "fa60400a01fc6eef9d6b0e85",
+        "path": "apps/api/app/application/tasks/task_service.py",
+        "line": 132,
+        "description": "Python class apps.api.app.application.tasks.task_service.TaskService",
+        "observed_import_relation": "Python class apps.api.app.application.tasks.task_service.TaskService"
+      }
+    ],
+    "observation_kind": "static_delegation",
+    "operation_symbols": [
+      "apps.api.app.api.routes.analysis.create_task",
+      "apps.api.app.api.routes.analysis.download_artifact",
+      "apps.api.app.api.routes.analysis.get_analysis_results",
+      "apps.api.app.api.routes.analysis.get_task",
+      "apps.api.app.api.routes.analysis.upload_csv"
+    ],
+    "delegation_topology": [
+      "apps.api.app.api.routes.analysis",
+      "apps.api.app.application.tasks.task_service.TaskService"
+    ],
+    "operation_family": [],
+    "test_linkages": [],
+    "evidence_groups": [],
+    "examined_operation_symbols": [
+      "apps.api.app.api.routes.analysis.create_task",
+      "apps.api.app.api.routes.analysis.download_artifact",
+      "apps.api.app.api.routes.analysis.get_analysis_results",
+      "apps.api.app.api.routes.analysis.get_task",
+      "apps.api.app.api.routes.analysis.run_task",
+      "apps.api.app.api.routes.analysis.upload_csv"
+    ]
+  },
+  "response": {
+    "repository_id": "5760d370c9d0632845cf",
+    "candidate_id": "structural-delegation-965c3e7f38813b3a3d56fd9a",
+    "decision": "ARCHITECTURE_RULE",
+    "reason": "Five listed analysis route operations delegate to TaskService in the application.tasks module through _task_service(session), with supplied call and binding evidence. This repeated topology supports a convention for the listed operations; run_task is explicitly outside the observation and does not establish an exception to it.",
+    "decision_evidence_ids": [
+      "0567f5e398c7d537f5a67b0f",
+      "0d2fd3060e6411653fdc399f",
+      "11797ff9abc28166d5a7ce49",
+      "177ab0289892b71faa4da01a",
+      "236b4e9ce9b8f39918d524a0",
+      "4397f9a5150a6b16df72f6ad",
+      "7382250d3841950f88459c58",
+      "822cc00718b9298631cf532a",
+      "8de0e0df7f8cb66813d19c25",
+      "974bbfe58facf541638d9376",
+      "9ccd033d15458dfe4eef7fd1",
+      "ae9a751bcfae3ad9b8cbffe3",
+      "c8ad98823dcdc0b6915442d1",
+      "c4028c6b991d5d9acc3ca69f"
+    ],
+    "source_package": "apps.api.app.api.routes.analysis",
+    "target_package": "apps.api.app.application.tasks.task_service.TaskService",
+    "scope_modules": [
+      "apps.api.app.api.routes.analysis"
+    ],
+    "scope_evidence_ids": [
+      "0567f5e398c7d537f5a67b0f",
+      "0d2fd3060e6411653fdc399f",
+      "11797ff9abc28166d5a7ce49",
+      "177ab0289892b71faa4da01a",
+      "236b4e9ce9b8f39918d524a0",
+      "4397f9a5150a6b16df72f6ad",
+      "7382250d3841950f88459c58",
+      "822cc00718b9298631cf532a",
+      "8de0e0df7f8cb66813d19c25",
+      "974bbfe58facf541638d9376",
+      "9ccd033d15458dfe4eef7fd1",
+      "ae9a751bcfae3ad9b8cbffe3",
+      "c8ad98823dcdc0b6915442d1",
+      "c4028c6b991d5d9acc3ca69f"
+    ],
+    "exceptions": []
+  }
+}

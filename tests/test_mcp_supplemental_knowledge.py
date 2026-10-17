@@ -7,8 +7,8 @@ import pytest
 from test_incremental_evolution_v2 import full, models
 from test_incremental_evolution_v2 import rich_repo as rich_repo
 
-from skillforge.integration.autonomous import install
 from skillforge.domain.skills import ProjectSkill
+from skillforge.integration.autonomous import install
 from skillforge.integration.mcp_server import ProjectTools
 from skillforge.productization.evolution_artifacts import load_baseline
 from skillforge.verify import VerifyPlanBuilder
@@ -114,6 +114,30 @@ def test_search_does_not_grant_foreign_access_or_replace_task(service):
         service.call("get_skill", {"skill_id": "foreign"})
     service.call("get_related_workflow", {"task": "a different unrelated task"})
     assert not service.search_routes and not service.consumed_routes
+
+
+def test_read_one_search_skill_never_exports_whole_route(service, monkeypatch):
+    from skillforge.integration.agent_skills import AgentSkillExporter
+
+    primary = service.call("get_related_workflow", {"task": "unrelated"})
+    primary_ids = {item["skill_id"] for item in primary["skills"]}
+    query = " ".join(skill.trigger.task_description for skill in service.registry.skills
+                     if isinstance(skill, ProjectSkill))
+    search = service.call("search_project_rules", {"query": query})
+    selected = next(item["skill_id"] for item in search["skills"]
+                    if item["skill_id"] not in primary_ids)
+    assert len(service.search_routes[selected].matches) >= 2
+
+    def reject_full_export(*args, **kwargs):
+        pytest.fail("a single get_skill request must not export the entire route")
+
+    monkeypatch.setattr(AgentSkillExporter, "plan", reject_full_export)
+    first = service.call("get_skill", {"skill_id": selected})
+    assert first["files"]["SKILL.md"]
+    repeated = service.call("get_skill", {"skill_id": selected})
+    assert repeated["already_read"] and repeated["files"] == {}
+    refreshed = service.call("get_skill", {"skill_id": selected, "refresh": True})
+    assert refreshed["files"] == first["files"]
 
 
 def test_previously_selected_skill_cannot_be_read_after_head_changes(service):

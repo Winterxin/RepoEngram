@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections import defaultdict
 from itertools import combinations
 from pathlib import PurePosixPath
 
@@ -28,6 +29,20 @@ LOCK_FILES = frozenset({
     "poetry.lock", "Pipfile.lock", "package-lock.json", "pnpm-lock.yaml",
     "yarn.lock", "Cargo.lock",
 })
+
+
+def _join_frequent_itemsets(previous: set[tuple[str, ...]]) -> set[tuple[str, ...]]:
+    """Generate exactly the Apriori candidates without enumerating unrelated items."""
+    groups = defaultdict(list)
+    for item in sorted(previous):
+        groups[item[:-1]].append(item)
+    candidates = set()
+    for items in groups.values():
+        for left, right in combinations(items, 2):
+            candidate = (*left, right[-1])
+            if all(subset in previous for subset in combinations(candidate, len(left))):
+                candidates.add(candidate)
+    return candidates
 
 
 class ChangePatternMiner:
@@ -123,13 +138,7 @@ class ChangePatternMiner:
                         pair for pair in combinations(singleton_values, 2)
                     }
                 else:
-                    candidates = {
-                        candidate for candidate in combinations(
-                            sorted({value for item in frequent_previous for value in item}), size
-                        )
-                        if all(subset in frequent_previous
-                               for subset in combinations(candidate, size - 1))
-                    }
+                    candidates = _join_frequent_itemsets(frequent_previous)
                 frequent_current: set[tuple[str, ...]] = set()
                 for values in sorted(candidates):
                     matching = [

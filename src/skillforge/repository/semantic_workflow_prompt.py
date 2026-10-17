@@ -1,6 +1,7 @@
 """Deterministic prompt construction for evidence-bounded workflow abstraction."""
 
 import json
+from copy import deepcopy
 
 from skillforge.domain.semantic_workflow import SemanticWorkflowRequest
 
@@ -117,42 +118,82 @@ def _response_schema() -> dict[str, object]:
     }
 
 
-def semantic_workflow_response_schema() -> dict[str, object]:
-    """Decision envelope with a complete workflow only when the model chooses one."""
-    workflow = _response_schema()
+CLASSIFICATION_PROTOCOL = "ordered-step-classification-v2"
+
+
+def _decision_schema(workflow: dict[str, object], *, protocol: str | None = None):
+    """Shared decision envelope; protocol-less form is retained for old snapshots."""
     for field in ("repository_id", "candidate_id", "confidence_score"):
         workflow["required"].remove(field)
         del workflow["properties"][field]
+    required = [
+        "repository_id", "candidate_id", "decision", "reason",
+        "decision_evidence_ids", "confidence_score", "support", "workflow",
+    ]
+    properties = {
+        "repository_id": {"type": "string"},
+        "candidate_id": {"type": "string"},
+        "decision": {
+            "type": "string",
+            "enum": ["WORKFLOW", "INCOHERENT", "INSUFFICIENT_EVIDENCE"],
+        },
+        "reason": {"type": "string", "minLength": 1},
+        "decision_evidence_ids": {
+            "type": "array", "items": {"type": "string"}, "minItems": 1,
+        },
+        "confidence_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "support": {
+            "type": "object", "additionalProperties": False,
+            "required": ["supporting", "examined"],
+            "properties": {
+                "supporting": {"type": "integer", "minimum": 0},
+                "examined": {"type": "integer", "minimum": 0},
+            },
+        },
+        "workflow": {**workflow, "type": ["object", "null"]},
+    }
+    if protocol is not None:
+        required.insert(2, "classification_protocol")
+        properties["classification_protocol"] = {"type": "string", "enum": [protocol]}
     return {
         "type": "object",
         "additionalProperties": False,
-        "required": [
-            "repository_id", "candidate_id", "decision", "reason",
-            "decision_evidence_ids", "confidence_score", "support", "workflow",
-        ],
-        "properties": {
-            "repository_id": {"type": "string"},
-            "candidate_id": {"type": "string"},
-            "decision": {
-                "type": "string",
-                "enum": ["WORKFLOW", "INCOHERENT", "INSUFFICIENT_EVIDENCE"],
-            },
-            "reason": {"type": "string", "minLength": 1},
-            "decision_evidence_ids": {
-                "type": "array", "items": {"type": "string"}, "minItems": 1,
-            },
-            "confidence_score": {"type": "number", "minimum": 0, "maximum": 1},
-            "support": {
-                "type": "object", "additionalProperties": False,
-                "required": ["supporting", "examined"],
-                "properties": {
-                    "supporting": {"type": "integer", "minimum": 0},
-                    "examined": {"type": "integer", "minimum": 0},
-                },
-            },
-            "workflow": {**workflow, "type": ["object", "null"]},
-        },
+        "required": required,
+        "properties": properties,
     }
+
+
+def legacy_semantic_workflow_response_schema() -> dict[str, object]:
+    """Schema for persisted protocol-less responses; their validation is unchanged."""
+    return _decision_schema(_response_schema())
+
+
+def semantic_workflow_response_schema() -> dict[str, object]:
+    """Current decision protocol: each ordered step carries one classification."""
+    workflow = deepcopy(_response_schema())
+    props = workflow["properties"]
+    workflow["required"] = [
+        field for field in workflow["required"]
+        if field not in {"required_steps", "optional_steps", "conditional_steps"}
+    ]
+    for field in ("required_steps", "optional_steps", "conditional_steps"):
+        del props[field]
+    ordered = props["ordered_steps"]["items"]
+    ordered["required"] += [
+        "classification_kind", "classification_reason",
+        "classification_evidence_ids", "classification_condition",
+    ]
+    ordered["properties"].update({
+        "classification_kind": {
+            "type": "string", "enum": ["required", "optional", "conditional"],
+        },
+        "classification_reason": {"type": "string", "minLength": 1},
+        "classification_evidence_ids": deepcopy(
+            props["name_evidence_ids"]
+        ),
+        "classification_condition": {"type": ["string", "null"]},
+    })
+    return _decision_schema(workflow, protocol=CLASSIFICATION_PROTOCOL)
 
 
 class SemanticWorkflowPromptBuilder:
@@ -184,22 +225,27 @@ class SemanticWorkflowPromptBuilder:
             "reject when no concrete recurring contract is evidenced.",
             "For either rejection, set workflow to null and give an Evidence-grounded reason. "
             "Do not invent generic steps just to produce a workflow.",
-            "For a grounded workflow, make action text as specific as the Evidence permits: "
-            "state the observed input or state, the operation, and its observable result. "
-            "A generic 'edit the module and update tests' summary must not replace "
-            "concrete behavior already established by the supplied examples.",
+            "Write guidance for a class of future tasks, not a retelling or instruction to "
+            "repeat a completed fix. Name that task class and its discriminating trigger in "
+            "name and intent. Assume the coding agent already knows general engineering: "
+            "keep the non-obvious project contract that changes its implementation decision, "
+            "including evidenced ownership, propagation, timing, or failure behavior. "
+            "A generic 'edit the module and update tests' summary is insufficient.",
             "Use the existing action, conditional condition, and exception fields for "
             "Evidence-supported boundaries, retained values, and fallback behavior. "
             "Do not invent precision when only metadata or co-change is available; "
             "name the operation at the supported level instead.",
-            "For behavior repairs, state the Evidence-supported target behavior; change "
-            "implementation when it is unmet, not merely to repeat historical edits. "
-            "Required new artifacts and migrations still require their actual changes. "
-            "Current code may be defective; history alone does not establish preservation "
-            "policy. Do not turn observed code into a new mandatory project policy.",
-            "Keep each claim concise. Cite only the Evidence needed to support that "
-            "claim, without repeating commit inventories or the same behavior in every "
-            "role and step. Conditions and exceptions need their own relevant citations.",
+            "For behavior repairs, explain the supported target behavior and why a plausible "
+            "alternative misses it, only where the Evidence establishes that distinction. "
+            "Do not repeat a historical edit when current code already satisfies it. "
+            "Co-edited tests do not establish a mandatory testing step; preserve specific "
+            "evidenced regression scenarios instead. Current code may be defective; "
+            "observations alone do not establish mandatory project policy.",
+            "Keep each claim concise and state each decision once. Use existing fields: "
+            "action for the concrete decision, classification reason for its rationale, "
+            "condition and exceptions for boundaries, with relevant citations for each. "
+            "Do not add generic inspection, testing, reporting, or completion rituals. "
+            "If no reusable project-specific decision is supported, reject the candidate.",
             "For WORKFLOW, provide the complete workflow object and explain the decision "
             "with decision_evidence_ids. Echo the supplied support counts exactly.",
             "Scope selectors are separate exact entities. Use an empty array for unknown or "
@@ -235,12 +281,16 @@ class SemanticWorkflowPromptBuilder:
             "Do not infer a business domain from a file name.",
             "Within a WORKFLOW, every role, ordered step, scope, exception, name, and intent "
             "must cite supplied Evidence IDs.",
-            "Every required, optional, or conditional classification must cite Evidence IDs "
-            "and explain its reason.",
-            "For WORKFLOW, classify every ordered step exactly once as required, optional, "
-            "or conditional and supply at least one supported logical step.",
-            "Required and optional steps must set condition to null. Conditional steps "
-            "must state a non-empty trigger condition supported by their Evidence IDs. "
+            f"Set classification_protocol to exactly {CLASSIFICATION_PROTOCOL!r}. "
+            "For WORKFLOW, put exactly one classification_kind, classification_reason, "
+            "classification_evidence_ids, and classification_condition inside each "
+            "ordered_steps item; do not return required_steps, optional_steps, or "
+            "conditional_steps arrays. Classify each supported logical step exactly once "
+            "as required, optional, or conditional and supply at least one such step.",
+            "Each classification_evidence_ids array must cite at least one supplied Evidence ID. "
+            "Required and optional steps must set classification_condition to null. "
+            "Conditional steps must state a non-empty trigger condition supported by "
+            "classification_evidence_ids. "
             "Do not derive a condition from a file name.",
             "Subset support counts may inform an optionality hypothesis, but must not "
             "decide optionality by rule.",
